@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="440" viewBox="0 0 1100 440" role="img" aria-labelledby="title desc">
+  <title id="title">JWT vulnerable flow</title>
+  <desc id="desc">JWT demo flow showing alg none token forgery.</desc>
+  <rect width="1100" height="440" rx="24" fill="#101318"/>
+  <text x="60" y="70" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="34" font-weight="700">Alur Demo JWT Rentan</text>
+  <text x="60" y="104" fill="#aeb8c5" font-family="Arial, sans-serif" font-size="17">JWT sengaja dibuat rentan agar payload bisa dipalsukan menjadi ADMIN.</text>
+
+  <rect x="60" y="155" width="210" height="150" rx="12" fill="#202833" stroke="#ffd166"/>
+  <text x="88" y="198" fill="#ffd166" font-family="Arial, sans-serif" font-size="20" font-weight="700">1. Ambil JWT</text>
+  <text x="88" y="235" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">role: USER</text>
+  <text x="88" y="263" fill="#aeb8c5" font-family="Arial, sans-serif" font-size="15">Token bisa dibaca</text>
+
+  <rect x="325" y="155" width="210" height="150" rx="12" fill="#202833" stroke="#ff4d5e"/>
+  <text x="353" y="198" fill="#ff4d5e" font-family="Arial, sans-serif" font-size="20" font-weight="700">2. Forge Token</text>
+  <text x="353" y="235" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">alg: none</text>
+  <text x="353" y="263" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">role: ADMIN</text>
+
+  <rect x="590" y="155" width="210" height="150" rx="12" fill="#202833" stroke="#ff4d5e"/>
+  <text x="618" y="198" fill="#ff4d5e" font-family="Arial, sans-serif" font-size="20" font-weight="700">3. Vault API</text>
+  <text x="618" y="235" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">Signature dilewati</text>
+  <text x="618" y="263" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">ADMIN diterima</text>
+
+  <rect x="855" y="155" width="210" height="150" rx="12" fill="#202833" stroke="#67d4ff"/>
+  <text x="883" y="198" fill="#67d4ff" font-family="Arial, sans-serif" font-size="20" font-weight="700">4. Presenter</text>
+  <text x="883" y="235" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">SISTEM DIRETAS</text>
+  <text x="883" y="263" fill="#aeb8c5" font-family="Arial, sans-serif" font-size="15">Nama peserta tampil</text>
+
+  <path d="M 280 230 L 315 230" stroke="#aeb8c5" stroke-width="4" fill="none"/>
+  <path d="M 305 218 L 325 230 L 305 242" fill="#aeb8c5"/>
+  <path d="M 545 230 L 580 230" stroke="#aeb8c5" stroke-width="4" fill="none"/>
+  <path d="M 570 218 L 590 230 L 570 242" fill="#aeb8c5"/>
+  <path d="M 810 230 L 845 230" stroke="#aeb8c5" stroke-width="4" fill="none"/>
+  <path d="M 835 218 L 855 230 L 835 242" fill="#aeb8c5"/>
+
+  <rect x="135" y="340" width="830" height="42" rx="8" fill="#22191d" stroke="#ff4d5e"/>
+  <text x="165" y="367" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">Inti pelajaran: JWT aman hanya jika verifikasi algoritma dan signature dilakukan dengan benar.</text>
+</svg>
