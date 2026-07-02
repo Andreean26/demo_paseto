@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Presenter | Live Demo PASETO</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">HM</span>
+        <span>Live Demo PASETO</span>
+      </div>
+      <nav class="nav-links" aria-label="Halaman demo">
+        <a href="/audience.html">Audience</a>
+        <a href="/presenter.html">Presenter</a>
+      </nav>
+    </header>
+
+    <main class="page">
+      <section class="hero-grid">
+        <div class="panel stage">
+          <p class="eyebrow">JWT vs PASETO</p>
+          <h1>Live CTF</h1>
+          <p class="lead">Tampilkan halaman ini di proyektor. Audiens masuk dari halaman audience, lalu sistem akan memberi notifikasi real-time saat mode JWT berhasil dijebol.</p>
+          <div class="button-row">
+            <a class="ghost-button" href="/audience.html" target="_blank" rel="noreferrer">Buka audience</a>
+          </div>
+        </div>
+
+        <aside class="panel mode-card">
+          <div>
+            <p class="eyebrow">Kontrol keamanan</p>
+            <span class="mode-badge" id="modeBadge">JWT Vulnerable</span>
+          </div>
+          <div class="switch-row">
+            <div>
+              <h2>Mode Keamanan</h2>
+              <p class="muted" id="modeHelp">JWT menerima alg:none untuk demo serangan.</p>
+            </div>
+            <label class="switch" aria-label="Ganti mode keamanan">
+              <input id="modeToggle" type="checkbox">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <button class="quiet-button" id="resetButton" type="button">Bersihkan event</button>
+        </aside>
+      </section>
+
+      <section class="content-grid">
+        <div class="panel alert-panel" id="alertPanel">
+          <p class="eyebrow">Status panggung</p>
+          <h2 class="status-headline" id="headline">Sistem menunggu</h2>
+          <p class="lead" id="subline">Belum ada peserta yang berhasil membuka brankas.</p>
+        </div>
+
+        <div class="panel form-panel">
+          <h2>Link audience</h2>
+          <code class="mono" id="audienceUrl">-</code>
+          <h2 style="margin-top: 22px;">Live event</h2>
+          <div class="event-list" id="eventList"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/presenter.js"></script>
+  </body>
+</html>
