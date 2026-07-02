@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Audience | Live Demo PASETO</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">HM</span>
+        <span>Live Demo PASETO</span>
+      </div>
+      <nav class="nav-links" aria-label="Halaman demo">
+        <a href="/audience.html">Audience</a>
+        <a href="/presenter.html">Presenter</a>
+      </nav>
+    </header>
+
+    <main class="page audience-layout">
+      <section class="panel form-panel">
+        <p class="eyebrow">Live CTF</p>
+        <h1>Masuk ke brankas.</h1>
+        <p class="lead">Pilih jalur demo: JWT bisa dipalsukan menjadi ADMIN, sedangkan PASETO-style token tidak bisa dibaca dan akan gagal kalau diubah satu karakter.</p>
+
+        <form id="nameForm">
+          <label for="nameInput">Nama peserta</label>
+          <input id="nameInput" name="name" autocomplete="name" placeholder="Tulis nama kamu" required>
+          <div class="button-row" style="margin-top: 14px;">
+            <button class="quiet-button" type="submit">Ambil token mode aktif</button>
+          </div>
+        </form>
+
+        <div class="demo-actions" aria-label="Pilihan demo">
+          <button class="danger-button" id="jwtDemoButton" type="button">Demo JWT rentan</button>
+          <button class="primary-button" id="pasetoDemoButton" type="button">Demo PASETO secure</button>
+        </div>
+
+        <div class="profile-strip">
+          <div class="profile-cell">
+            <span>Mode</span>
+            <strong id="modeLabel">-</strong>
+          </div>
+          <div class="profile-cell">
+            <span>Role</span>
+            <strong id="roleLabel">USER</strong>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="panel token-panel">
+          <h2>Token</h2>
+          <p class="muted" id="tokenHint">Pilih demo JWT atau PASETO untuk membuat token.</p>
+          <textarea id="tokenBox" spellcheck="false" placeholder="Token akan muncul di sini setelah nama dikirim."></textarea>
+          <div class="button-row" style="margin-top: 14px;">
+            <button class="primary-button" id="accessButton" type="button">Akses brankas rahasia</button>
+            <button class="quiet-button" id="copyButton" type="button">Salin token</button>
+            <button class="quiet-button" id="tamperButton" type="button">Rusak 1 karakter</button>
+            <button class="danger-button" id="forgeButton" type="button">Forge JWT ADMIN</button>
+          </div>
+        </div>
+
+        <div class="panel result-panel" id="resultPanel">
+          <h2>Status</h2>
+          <p class="muted" id="resultText">Belum ada request.</p>
+        </div>
+      </section>
+    </main>
+
+    <script src="/audience.js"></script>
+  </body>
+</html>
