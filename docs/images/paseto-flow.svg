@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="440" viewBox="0 0 1100 440" role="img" aria-labelledby="title desc">
+  <title id="title">PASETO secure flow</title>
+  <desc id="desc">PASETO style secure flow showing encrypted token tamper detection.</desc>
+  <rect width="1100" height="440" rx="24" fill="#101318"/>
+  <text x="60" y="70" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="34" font-weight="700">Alur Demo PASETO Secure</text>
+  <text x="60" y="104" fill="#aeb8c5" font-family="Arial, sans-serif" font-size="17">Token secure tidak bisa dibaca sebagai JSON dan langsung gagal jika dimodifikasi.</text>
+
+  <rect x="60" y="155" width="210" height="150" rx="12" fill="#202833" stroke="#3ddc97"/>
+  <text x="88" y="198" fill="#3ddc97" font-family="Arial, sans-serif" font-size="20" font-weight="700">1. Ambil Token</text>
+  <text x="88" y="235" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">prefix: v4.local</text>
+  <text x="88" y="263" fill="#aeb8c5" font-family="Arial, sans-serif" font-size="15">Payload terenkripsi</text>
+
+  <rect x="325" y="155" width="210" height="150" rx="12" fill="#202833" stroke="#ffd166"/>
+  <text x="353" y="198" fill="#ffd166" font-family="Arial, sans-serif" font-size="20" font-weight="700">2. Rusak Token</text>
+  <text x="353" y="235" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">Ubah 1 karakter</text>
+  <text x="353" y="263" fill="#aeb8c5" font-family="Arial, sans-serif" font-size="15">Ciphertext berubah</text>
+
+  <rect x="590" y="155" width="210" height="150" rx="12" fill="#202833" stroke="#3ddc97"/>
+  <text x="618" y="198" fill="#3ddc97" font-family="Arial, sans-serif" font-size="20" font-weight="700">3. Vault API</text>
+  <text x="618" y="235" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">Auth tag gagal</text>
+  <text x="618" y="263" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">Role tidak dibaca</text>
+
+  <rect x="855" y="155" width="210" height="150" rx="12" fill="#202833" stroke="#67d4ff"/>
+  <text x="883" y="198" fill="#67d4ff" font-family="Arial, sans-serif" font-size="20" font-weight="700">4. Presenter</text>
+  <text x="883" y="235" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">BLOCKED</text>
+  <text x="883" y="263" fill="#aeb8c5" font-family="Arial, sans-serif" font-size="15">Percobaan ditolak</text>
+
+  <path d="M 280 230 L 315 230" stroke="#aeb8c5" stroke-width="4" fill="none"/>
+  <path d="M 305 218 L 325 230 L 305 242" fill="#aeb8c5"/>
+  <path d="M 545 230 L 580 230" stroke="#aeb8c5" stroke-width="4" fill="none"/>
+  <path d="M 570 218 L 590 230 L 570 242" fill="#aeb8c5"/>
+  <path d="M 810 230 L 845 230" stroke="#aeb8c5" stroke-width="4" fill="none"/>
+  <path d="M 835 218 L 855 230 L 835 242" fill="#aeb8c5"/>
+
+  <rect x="135" y="340" width="830" height="42" rx="8" fill="#14231d" stroke="#3ddc97"/>
+  <text x="165" y="367" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">Inti pelajaran: token terenkripsi dan terautentikasi menolak perubahan sebelum payload dipakai.</text>
+</svg>
