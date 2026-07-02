@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="520" viewBox="0 0 1100 520" role="img" aria-labelledby="title desc">
+  <title id="title">Live Demo PASETO overview</title>
+  <desc id="desc">Overview of presenter, audience, and backend flow.</desc>
+  <rect width="1100" height="520" rx="24" fill="#101318"/>
+  <rect x="36" y="36" width="1028" height="448" rx="18" fill="#161c24" stroke="#313b48"/>
+  <text x="70" y="86" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="34" font-weight="700">Live Demo PASETO</text>
+  <text x="70" y="118" fill="#aeb8c5" font-family="Arial, sans-serif" font-size="17">Audience mencoba token. Presenter melihat hasil serangan dan blokir secara live.</text>
+
+  <rect x="70" y="170" width="250" height="210" rx="12" fill="#202833" stroke="#67d4ff"/>
+  <text x="100" y="216" fill="#67d4ff" font-family="Arial, sans-serif" font-size="22" font-weight="700">Audience</text>
+  <text x="100" y="254" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">1. Isi nama</text>
+  <text x="100" y="284" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">2. Ambil token</text>
+  <text x="100" y="314" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">3. Forge atau rusak token</text>
+  <text x="100" y="344" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">4. Akses brankas</text>
+
+  <rect x="425" y="170" width="250" height="210" rx="12" fill="#202833" stroke="#3ddc97"/>
+  <text x="455" y="216" fill="#3ddc97" font-family="Arial, sans-serif" font-size="22" font-weight="700">Node Server</text>
+  <text x="455" y="254" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">JWT Vulnerable</text>
+  <text x="455" y="284" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">PASETO Secure</text>
+  <text x="455" y="314" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">Vault API</text>
+  <text x="455" y="344" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">Live event stream</text>
+
+  <rect x="780" y="170" width="250" height="210" rx="12" fill="#202833" stroke="#ffd166"/>
+  <text x="810" y="216" fill="#ffd166" font-family="Arial, sans-serif" font-size="22" font-weight="700">Presenter</text>
+  <text x="810" y="254" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">Toggle mode</text>
+  <text x="810" y="284" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">SISTEM DIRETAS</text>
+  <text x="810" y="314" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">Percobaan diblokir</text>
+  <text x="810" y="344" fill="#f4f7fb" font-family="Arial, sans-serif" font-size="16">Event real-time</text>
+
+  <path d="M 330 275 L 405 275" stroke="#aeb8c5" stroke-width="4" fill="none"/>
+  <path d="M 395 263 L 415 275 L 395 287" fill="#aeb8c5"/>
+  <path d="M 685 275 L 760 275" stroke="#aeb8c5" stroke-width="4" fill="none"/>
+  <path d="M 750 263 L 770 275 L 750 287" fill="#aeb8c5"/>
+
+  <rect x="160" y="410" width="780" height="42" rx="8" fill="#101318" stroke="#313b48"/>
+  <text x="190" y="437" fill="#aeb8c5" font-family="Arial, sans-serif" font-size="16">Audience URL: /audience.html</text>
+  <text x="570" y="437" fill="#aeb8c5" font-family="Arial, sans-serif" font-size="16">Presenter URL: /presenter.html</text>
+</svg>
