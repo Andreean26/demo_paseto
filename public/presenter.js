@@ -9,6 +9,69 @@ const headline = document.querySelector('#headline');
 const subline = document.querySelector('#subline');
 const eventList = document.querySelector('#eventList');
 const audienceUrl = document.querySelector('#audienceUrl');
+const presenterAccess = document.querySelector('#presenterAccess');
+
+const presenterKeyStorage = 'demo-paseto-presenter-key';
+const query = new URLSearchParams(window.location.search);
+let presenterKey = query.get('key') || sessionStorage.getItem(presenterKeyStorage) || '';
+
+if (query.has('key')) {
+  if (presenterKey) {
+    sessionStorage.setItem(presenterKeyStorage, presenterKey);
+  }
+  query.delete('key');
+  const cleanQuery = query.toString();
+  const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash}`;
+  window.history.replaceState({}, '', cleanUrl);
+}
+
+function setControlAvailability() {
+  const authorized = Boolean(presenterKey);
+  modeToggle.disabled = !authorized;
+  resetButton.disabled = !authorized;
+  presenterAccess.textContent = authorized
+    ? 'Akses presenter aktif. Perubahan mode akan disiarkan ke seluruh audience.'
+    : 'Mode hanya-baca. Buka URL Presenter yang dicetak di terminal server.';
+  presenterAccess.classList.toggle('authorized', authorized);
+}
+
+function revokePresenterAccess() {
+  presenterKey = '';
+  sessionStorage.removeItem(presenterKeyStorage);
+  setControlAvailability();
+}
+
+async function presenterPost(path, body) {
+  if (!presenterKey) {
+    return {
+      response: null,
+      payload: { ok: false, error: 'Kunci presenter tidak tersedia.' }
+    };
+  }
+
+  const headers = { 'x-presenter-key': presenterKey };
+  if (body) {
+    headers['content-type'] = 'application/json';
+  }
+
+  try {
+    const response = await fetch(path, {
+      method: 'POST',
+      headers,
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const payload = await response.json();
+    if (response.status === 403) {
+      revokePresenterAccess();
+    }
+    return { response, payload };
+  } catch {
+    return {
+      response: null,
+      payload: { ok: false, error: 'Server tidak dapat dihubungi.' }
+    };
+  }
+}
 
 function setMode(mode) {
   const secure = mode === 'paseto';
@@ -64,12 +127,15 @@ async function loadState() {
 
 async function changeMode() {
   const mode = modeToggle.checked ? 'paseto' : 'jwt';
-  const response = await fetch('/api/mode', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ mode })
-  });
-  const payload = await response.json();
+  modeToggle.disabled = true;
+  const { response, payload } = await presenterPost('/api/mode', { mode });
+  if (!response || !response.ok) {
+    await loadState().catch(() => {});
+    subline.textContent = payload.error || 'Mode gagal diganti.';
+    setControlAvailability();
+    return;
+  }
+
   setMode(payload.mode);
   headline.textContent = payload.mode === 'paseto' ? 'Benteng aktif' : 'Sistem menunggu';
   subline.textContent =
@@ -77,15 +143,23 @@ async function changeMode() {
       ? 'Sekarang token secure akan menolak modifikasi satu karakter pun.'
       : 'Mode JWT rentan aktif. Biarkan audiens mencoba alg:none.';
   alertPanel.classList.remove('breach');
+  setControlAvailability();
 }
 
 async function resetEvents() {
-  const response = await fetch('/api/reset', { method: 'POST' });
-  const payload = await response.json();
+  resetButton.disabled = true;
+  const { response, payload } = await presenterPost('/api/reset');
+  if (!response || !response.ok) {
+    subline.textContent = payload.error || 'Event gagal dibersihkan.';
+    setControlAvailability();
+    return;
+  }
+
   renderEvents(payload.events || []);
   headline.textContent = 'Sistem menunggu';
   subline.textContent = 'Belum ada peserta yang berhasil membuka brankas.';
   alertPanel.classList.remove('breach');
+  setControlAvailability();
 }
 
 function connectEvents() {
@@ -117,6 +191,7 @@ function connectEvents() {
 audienceUrl.textContent = `${window.location.origin}/audience.html`;
 modeToggle.addEventListener('change', changeMode);
 resetButton.addEventListener('click', resetEvents);
+setControlAvailability();
 
 loadState().then(connectEvents).catch(() => {
   eventList.textContent = 'Tidak bisa terhubung ke server.';

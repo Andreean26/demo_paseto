@@ -7,10 +7,10 @@ Live Demo PASETO adalah aplikasi demo interaktif untuk presentasi keamanan token
 ## Isi Demo
 
 - Halaman audience untuk peserta mengisi nama, mengambil token, dan mencoba akses brankas.
-- Halaman presenter untuk menampilkan mode keamanan dan event live saat demo berjalan.
+- Halaman presenter dengan kontrol eksklusif untuk memindahkan mode keamanan.
 - Mode `JWT Vulnerable` yang sengaja menerima token palsu `alg:none`.
 - Mode `PASETO Secure` yang memakai token `v4.local` terenkripsi dengan AEAD `AES-256-GCM`.
-- Event real-time memakai Server-Sent Events, jadi presenter langsung mendapat notifikasi saat ada percobaan berhasil atau diblokir.
+- Sinkronisasi real-time memakai Server-Sent Events, jadi audience otomatis mengikuti mode presenter dan presenter langsung mendapat notifikasi saat ada percobaan berhasil atau diblokir.
 
 ## Prasyarat
 
@@ -42,24 +42,26 @@ Jika berhasil, terminal akan menampilkan URL seperti ini:
 ```text
 Live Demo PASETO running
 Audience : http://localhost:8080/audience.html
-Presenter: http://localhost:8080/presenter.html
+Presenter: http://localhost:8080/presenter.html?key=<kunci-presenter>
 LAN URLs :
-  http://192.168.x.x:8080/audience.html
-  http://192.168.x.x:8080/presenter.html
+  Audience : http://192.168.x.x:8080/audience.html
+  Presenter: http://192.168.x.x:8080/presenter.html?key=<kunci-presenter>
 ```
 
 ## Buka Halaman Demo
 
 Di laptop presenter:
 
-- Presenter: http://localhost:8080/presenter.html
-- Audience: http://localhost:8080/audience.html
+- Buka URL `Presenter` lengkap yang dicetak di terminal. URL tersebut berisi kunci acak untuk mengaktifkan kontrol mode.
+- Jangan bagikan URL presenter kepada peserta.
 
 Di HP peserta:
 
-- Gunakan URL `LAN URLs` yang muncul di terminal.
+- Bagikan hanya URL `Audience` pada bagian `LAN URLs`.
 - Contoh: `http://192.168.x.x:8080/audience.html`
 - Pastikan laptop dan HP berada di Wi-Fi yang sama.
+
+Kunci presenter dibuat ulang setiap kali server dijalankan. Setelah URL presenter dibuka, kunci disimpan untuk tab tersebut dan dihapus dari address bar.
 
 ## Alur Demo JWT Rentan
 
@@ -67,11 +69,12 @@ Di HP peserta:
 
 1. Buka halaman `Audience`.
 2. Isi nama peserta.
-3. Klik `Demo JWT rentan`.
-4. Token JWT role `USER` akan muncul.
-5. Klik `Forge JWT ADMIN`.
-6. Klik `Akses brankas rahasia`.
-7. Halaman presenter akan menampilkan pesan `SISTEM DIRETAS`.
+3. Presenter mengaktifkan mode `JWT Vulnerable`.
+4. Halaman audience berpindah otomatis dan token JWT role `USER` akan muncul atau diperbarui.
+5. Klik `Decode token` untuk melihat header `alg: HS256`, payload `role: USER`, dan signature awal.
+6. Klik `Forge JWT ADMIN`; decoder akan memperbarui hasil menjadi `alg: none`, `role: ADMIN`, dan signature kosong.
+7. Klik `Akses brankas rahasia`.
+8. Halaman presenter akan menampilkan pesan `SISTEM DIRETAS`.
 
 Kenapa bisa tembus:
 
@@ -85,11 +88,12 @@ Kenapa bisa tembus:
 
 1. Buka halaman `Audience`.
 2. Isi nama peserta.
-3. Klik `Demo PASETO secure`.
-4. Token secure dengan prefix `v4.local` akan muncul.
-5. Klik `Rusak 1 karakter`.
-6. Klik `Akses brankas rahasia`.
-7. Request akan ditolak dengan status `BLOCKED`.
+3. Presenter mengaktifkan mode `PASETO Secure`.
+4. Halaman audience berpindah otomatis dan token secure dengan prefix `v4.local` akan muncul atau diperbarui.
+5. Klik `Decode token` untuk melihat bahwa payload tetap opaque dan terenkripsi tanpa kunci.
+6. Klik `Rusak 1 karakter`.
+7. Klik `Akses brankas rahasia`.
+8. Request akan ditolak dengan status `BLOCKED`.
 
 Kenapa tidak tembus:
 
@@ -99,9 +103,9 @@ Kenapa tidak tembus:
 
 ## Alur Presenter
 
-1. Buka `http://localhost:8080/presenter.html`.
+1. Buka URL `Presenter` lengkap yang dicetak saat `npm start`.
 2. Tampilkan halaman tersebut di proyektor.
-3. Gunakan toggle `Mode Keamanan` jika ingin mengganti mode manual.
+3. Gunakan toggle `Mode Keamanan` untuk mengganti mode seluruh audience secara real-time.
 4. Gunakan `Bersihkan event` untuk menghapus daftar event sebelum mengulang demo.
 5. Saat JWT berhasil dijebol, presenter akan menampilkan notifikasi besar.
 6. Saat token secure dirusak, event blokir akan muncul di daftar live event.
@@ -110,16 +114,18 @@ Kenapa tidak tembus:
 
 1. Buka `http://localhost:8080/audience.html`.
 2. Isi nama peserta.
-3. Pilih `Demo JWT rentan` atau `Demo PASETO secure`.
-4. Gunakan textarea token untuk melihat atau mengubah token.
-5. Klik `Akses brankas rahasia` untuk mengirim token ke backend.
+3. Klik `Ambil token mode aktif`.
+4. Tunggu presenter memilih mode; halaman dan token akan diperbarui otomatis ketika mode berubah.
+5. Klik `Decode token` untuk memeriksa struktur token saat ini.
+6. Gunakan textarea token untuk melihat atau mengubah token; decoder ikut diperbarui setelah pertama kali dibuka.
+7. Klik `Akses brankas rahasia` untuk mengirim token ke backend.
 
 Tombol yang tersedia:
 
-- `Demo JWT rentan`: mengaktifkan mode JWT dan membuat token JWT role `USER`.
-- `Demo PASETO secure`: mengaktifkan mode secure dan membuat token `v4.local`.
-- `Forge JWT ADMIN`: membuat token JWT palsu dengan `alg:none` dan role `ADMIN`.
-- `Rusak 1 karakter`: mengubah karakter terakhir token untuk menguji tamper detection.
+- `Ambil token mode aktif`: membuat token USER sesuai mode yang dipilih presenter.
+- `Decode token`: membaca header, payload, dan signature JWT tanpa memverifikasi keasliannya; untuk token secure hanya menampilkan struktur opaque.
+- `Forge JWT ADMIN`: tampil hanya dalam mode JWT dan membuat token palsu dengan `alg:none` serta role `ADMIN`.
+- `Rusak 1 karakter`: tampil hanya dalam mode PASETO dan mengubah karakter terakhir token untuk menguji tamper detection.
 - `Salin token`: menyalin token ke clipboard.
 
 ## Struktur Proyek
@@ -147,11 +153,11 @@ demo_paseto/
 | Method | Path | Fungsi |
 | --- | --- | --- |
 | `GET` | `/api/state` | Melihat mode aktif dan event terbaru. |
-| `POST` | `/api/mode` | Mengganti mode ke `jwt` atau `paseto`. |
-| `POST` | `/api/reset` | Menghapus event presenter. |
+| `POST` | `/api/mode` | Mengganti mode ke `jwt` atau `paseto`; wajib header `x-presenter-key`. |
+| `POST` | `/api/reset` | Menghapus event presenter; wajib header `x-presenter-key`. |
 | `POST` | `/api/auth/generate` | Membuat token role `USER`. |
 | `POST` | `/api/vault/access` | Menguji akses brankas memakai token di header `Authorization`. |
-| `GET` | `/events` | Stream event real-time untuk halaman presenter. |
+| `GET` | `/events` | Stream mode dan event real-time untuk presenter serta audience. |
 
 ## Konfigurasi Opsional
 
@@ -167,6 +173,14 @@ Secret demo bisa diganti dengan environment variable:
 JWT_DEMO_SECRET="secret-jwt-demo" PASETO_DEMO_KEY="secret-paseto-demo" npm start
 ```
 
+Kunci presenter default dibuat acak saat startup. Jika perlu URL presenter yang stabil selama pengembangan, tetapkan sendiri:
+
+```bash
+PRESENTER_KEY="kunci-presenter-lokal" npm start
+```
+
+Jangan bagikan nilai `PRESENTER_KEY` atau URL presenter kepada audience.
+
 ## Troubleshooting
 
 Jika port `8080` sudah dipakai:
@@ -181,17 +195,17 @@ Jika HP tidak bisa membuka URL LAN:
 - Pastikan memakai URL `http://192.168.x.x:8080/audience.html` dari terminal, bukan `localhost`.
 - Cek firewall laptop jika request dari perangkat lain diblokir.
 
-Jika tombol PASETO terlihat seperti tidak bekerja:
+Jika audience tidak berpindah mode:
 
-- Klik `Demo PASETO secure` terlebih dahulu.
-- Pastikan token yang muncul diawali `v4.local`.
-- Klik `Rusak 1 karakter`, lalu klik `Akses brankas rahasia`.
+- Pastikan audience masih terhubung ke server yang sama dengan presenter.
+- Refresh halaman audience untuk menyambungkan ulang stream SSE.
+- Setelah nama peserta sudah dikirim, ubah mode dari toggle di halaman presenter dan pastikan token ikut diperbarui.
 
 Jika presenter tidak menerima event:
 
 - Refresh halaman presenter.
 - Pastikan server masih berjalan.
-- Buka ulang `http://localhost:8080/presenter.html`.
+- Buka ulang URL `Presenter` lengkap yang dicetak di terminal, bukan `/presenter.html` tanpa kunci.
 
 ## Catatan Keamanan
 

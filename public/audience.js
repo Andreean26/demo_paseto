@@ -10,13 +10,22 @@ const resultText = document.querySelector('#resultText');
 const accessButton = document.querySelector('#accessButton');
 const copyButton = document.querySelector('#copyButton');
 const forgeButton = document.querySelector('#forgeButton');
-const jwtDemoButton = document.querySelector('#jwtDemoButton');
-const pasetoDemoButton = document.querySelector('#pasetoDemoButton');
 const tamperButton = document.querySelector('#tamperButton');
 const tokenHint = document.querySelector('#tokenHint');
+const decodeButton = document.querySelector('#decodeButton');
+const decoderSummary = document.querySelector('#decoderSummary');
+const decoderDetails = document.querySelector('#decoderDetails');
+const decoderHeaderLabel = document.querySelector('#decoderHeaderLabel');
+const decoderPayloadLabel = document.querySelector('#decoderPayloadLabel');
+const decoderSignatureLabel = document.querySelector('#decoderSignatureLabel');
+const decoderHeader = document.querySelector('#decoderHeader');
+const decoderPayload = document.querySelector('#decoderPayload');
+const decoderSignature = document.querySelector('#decoderSignature');
 
 let currentName = '';
-let currentMode = 'jwt';
+let currentMode = null;
+let tokenRequestId = 0;
+let decoderActive = false;
 
 function setResult(text, kind) {
   resultText.textContent = text;
@@ -27,11 +36,14 @@ function setResult(text, kind) {
 }
 
 function setModeText(mode) {
-  modeLabel.textContent = mode === 'paseto' ? 'PASETO Secure' : 'JWT Vulnerable';
+  const secure = mode === 'paseto';
+  modeLabel.textContent = secure ? 'PASETO Secure' : 'JWT Vulnerable';
   tokenHint.textContent =
-    mode === 'paseto'
+    secure
       ? 'Token PASETO-style memakai prefix v4.local dan payload-nya terenkripsi. Coba rusak satu karakter, lalu akses brankas.'
       : 'Token JWT bisa dibaca. Coba Forge JWT ADMIN, lalu akses brankas.';
+  tamperButton.hidden = !secure;
+  forgeButton.hidden = secure;
 }
 
 function getParticipantName() {
@@ -51,6 +63,141 @@ function toBase64UrlJson(value) {
   return btoa(utf8).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
+function setDecoderSummary(text, kind) {
+  decoderSummary.textContent = text;
+  decoderSummary.classList.remove('secure', 'warning', 'error');
+  if (kind) {
+    decoderSummary.classList.add(kind);
+  }
+}
+
+function showDecoderDetails({ headerLabel, header, payloadLabel, payload, signatureLabel, signature }) {
+  decoderHeaderLabel.textContent = headerLabel;
+  decoderPayloadLabel.textContent = payloadLabel;
+  decoderSignatureLabel.textContent = signatureLabel;
+  decoderHeader.textContent = header;
+  decoderPayload.textContent = payload;
+  decoderSignature.textContent = signature;
+  decoderDetails.hidden = false;
+}
+
+function decodeBase64UrlBytes(value) {
+  if (!value || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error('Segmen token bukan base64url yang valid.');
+  }
+
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+  let binary;
+  try {
+    binary = atob(padded);
+  } catch {
+    throw new Error('Segmen token tidak dapat dibaca.');
+  }
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function decodeBase64UrlJson(value, partName) {
+  const text = new TextDecoder().decode(decodeBase64UrlBytes(value));
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('not-object');
+    }
+    return parsed;
+  } catch {
+    throw new Error(`${partName} token harus berupa objek JSON yang valid.`);
+  }
+}
+
+function inspectJwt(token) {
+  const parts = token.split('.');
+  if (parts.length !== 3 || !parts[0] || !parts[1]) {
+    throw new Error('JWT harus memiliki tiga segmen: header, payload, dan signature.');
+  }
+
+  const header = decodeBase64UrlJson(parts[0], 'Header');
+  const payload = decodeBase64UrlJson(parts[1], 'Payload');
+  const algorithm = String(header.alg || 'tidak diketahui');
+  const role = String(payload.role || 'tidak diketahui');
+  const forged = algorithm.toLowerCase() === 'none' && role.toUpperCase() === 'ADMIN';
+
+  showDecoderDetails({
+    headerLabel: 'Header JWT',
+    header: JSON.stringify(header, null, 2),
+    payloadLabel: 'Payload JWT',
+    payload: JSON.stringify(payload, null, 2),
+    signatureLabel: 'Signature JWT',
+    signature: parts[2] || '(kosong — token ini tidak memiliki signature)'
+  });
+
+  if (forged) {
+    setDecoderSummary(
+      'Hasil forge terlihat: algoritma menjadi none, role menjadi ADMIN, dan signature kosong.',
+      'warning'
+    );
+    return;
+  }
+
+  setDecoderSummary(
+    `Isi token saat ini: algoritma ${algorithm} dan role ${role}. JWT dapat dibaca tanpa mengetahui secret.`,
+    null
+  );
+}
+
+function inspectSecureToken(token) {
+  const encoded = token.slice('v4.local.'.length);
+  const packed = decodeBase64UrlBytes(encoded);
+
+  showDecoderDetails({
+    headerLabel: 'Header token',
+    header: 'v4.local',
+    payloadLabel: 'Payload terenkripsi',
+    payload: JSON.stringify(
+      {
+        status: 'opaque / tidak dapat dibaca',
+        encodedCharacters: encoded.length,
+        packedBytes: packed.length
+      },
+      null,
+      2
+    ),
+    signatureLabel: 'Autentikasi',
+    signature: 'Nonce, ciphertext, dan authentication tag AEAD dikemas bersama di dalam token.'
+  });
+  setDecoderSummary(
+    'Berbeda dari JWT, payload secure tetap terenkripsi. Audience hanya dapat melihat struktur dan ukurannya tanpa kunci.',
+    'secure'
+  );
+}
+
+function decodeToken() {
+  decoderActive = true;
+  const token = tokenBox.value.trim();
+  if (!token) {
+    decoderDetails.hidden = true;
+    setDecoderSummary('Token masih kosong. Ambil token terlebih dahulu.', 'error');
+    return;
+  }
+
+  try {
+    if (token.startsWith('v4.local.')) {
+      inspectSecureToken(token);
+    } else {
+      inspectJwt(token);
+    }
+  } catch (error) {
+    decoderDetails.hidden = true;
+    setDecoderSummary(error.message || 'Token tidak dapat di-decode.', 'error');
+  }
+}
+
+function refreshDecoder() {
+  if (decoderActive) {
+    decodeToken();
+  }
+}
+
 async function loadState() {
   const response = await fetch('/api/state');
   const payload = await response.json();
@@ -59,12 +206,16 @@ async function loadState() {
 }
 
 async function requestToken(name) {
+  const requestId = ++tokenRequestId;
   const response = await fetch('/api/auth/generate', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name })
   });
   const payload = await response.json();
+  if (requestId !== tokenRequestId) {
+    return null;
+  }
   if (!payload.ok) {
     setResult(payload.error || 'Token gagal dibuat.', 'error');
     return null;
@@ -74,7 +225,42 @@ async function requestToken(name) {
   tokenBox.value = payload.token;
   roleLabel.textContent = payload.role;
   setModeText(currentMode);
+  refreshDecoder();
   return payload;
+}
+
+async function syncPresenterMode(mode) {
+  const nextMode = mode === 'paseto' ? 'paseto' : 'jwt';
+  if (nextMode === currentMode) {
+    setModeText(nextMode);
+    return;
+  }
+
+  currentMode = nextMode;
+  setModeText(currentMode);
+  roleLabel.textContent = 'USER';
+
+  const name = currentName || nameInput.value.trim();
+  if (!name) {
+    tokenRequestId += 1;
+    tokenBox.value = '';
+    refreshDecoder();
+    setResult(
+      `Presenter mengganti mode ke ${modeLabel.textContent}. Isi nama untuk mengambil token mode aktif.`,
+      null
+    );
+    return;
+  }
+
+  currentName = name;
+  const payload = await requestToken(currentName);
+  if (!payload) {
+    return;
+  }
+  setResult(
+    `Presenter mengganti mode ke ${modeLabel.textContent}. Token USER diperbarui otomatis.`,
+    null
+  );
 }
 
 async function generateToken(event) {
@@ -84,35 +270,6 @@ async function generateToken(event) {
     return;
   }
   setResult('Token USER siap dicoba.', null);
-}
-
-async function setServerMode(mode) {
-  const response = await fetch('/api/mode', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ mode })
-  });
-  const payload = await response.json();
-  currentMode = payload.mode;
-  setModeText(currentMode);
-}
-
-async function startJwtDemo() {
-  await setServerMode('jwt');
-  const payload = await requestToken(getParticipantName());
-  if (!payload) {
-    return;
-  }
-  setResult('JWT USER dibuat. Tekan Forge JWT ADMIN, lalu akses brankas untuk menjebol mode rentan.', null);
-}
-
-async function startPasetoDemo() {
-  await setServerMode('paseto');
-  const payload = await requestToken(getParticipantName());
-  if (!payload) {
-    return;
-  }
-  setResult('PASETO secure dibuat. Tekan Rusak 1 karakter, lalu akses brankas untuk melihatnya diblokir.', null);
 }
 
 async function accessVault() {
@@ -156,6 +313,7 @@ function forgeJwt() {
   };
   tokenBox.value = `${toBase64UrlJson(header)}.${toBase64UrlJson(payload)}.`;
   roleLabel.textContent = 'ADMIN';
+  refreshDecoder();
   setResult('JWT palsu dibuat dengan alg:none. Kirim ke brankas saat mode JWT aktif.', null);
 }
 
@@ -168,17 +326,32 @@ function tamperToken() {
   const index = token.length - 1;
   const replacement = token[index] === 'A' ? 'B' : 'A';
   tokenBox.value = `${token.slice(0, index)}${replacement}`;
+  refreshDecoder();
   setResult('Satu karakter token diubah. Pada PASETO secure, akses harus ditolak.', null);
+}
+
+function connectEvents() {
+  const stream = new EventSource('/events');
+
+  const synchronize = (message) => {
+    const payload = JSON.parse(message.data);
+    syncPresenterMode(payload.mode).catch(() => {
+      setResult('Mode berubah, tetapi token baru gagal dibuat.', 'error');
+    });
+  };
+
+  stream.addEventListener('snapshot', synchronize);
+  stream.addEventListener('mode', synchronize);
 }
 
 nameForm.addEventListener('submit', generateToken);
 accessButton.addEventListener('click', accessVault);
 copyButton.addEventListener('click', copyToken);
 forgeButton.addEventListener('click', forgeJwt);
-jwtDemoButton.addEventListener('click', startJwtDemo);
-pasetoDemoButton.addEventListener('click', startPasetoDemo);
 tamperButton.addEventListener('click', tamperToken);
+decodeButton.addEventListener('click', decodeToken);
+tokenBox.addEventListener('input', refreshDecoder);
 
-loadState().catch(() => {
+loadState().then(connectEvents).catch(() => {
   setResult('Tidak bisa membaca status server.', 'error');
 });

@@ -14,15 +14,14 @@
       </div>
       <nav class="nav-links" aria-label="Halaman demo">
         <a href="/audience.html">Audience</a>
-        <a href="/presenter.html">Presenter</a>
       </nav>
     </header>
 
     <main class="page audience-layout">
       <section class="panel form-panel">
-        <p class="eyebrow">Live CTF</p>
+        <p class="eyebrow">Live Demo</p>
         <h1>Masuk ke brankas.</h1>
-        <p class="lead">Pilih jalur demo: JWT bisa dipalsukan menjadi ADMIN, sedangkan PASETO-style token tidak bisa dibaca dan akan gagal kalau diubah satu karakter.</p>
+        <p class="lead">Presenter menentukan mode JWT atau PASETO. Halaman ini akan mengikuti perpindahan mode secara otomatis tanpa perlu di-refresh.</p>
 
         <form id="nameForm">
           <label for="nameInput">Nama peserta</label>
@@ -31,11 +30,6 @@
             <button class="quiet-button" type="submit">Ambil token mode aktif</button>
           </div>
         </form>
-
-        <div class="demo-actions" aria-label="Pilihan demo">
-          <button class="danger-button" id="jwtDemoButton" type="button">Demo JWT rentan</button>
-          <button class="primary-button" id="pasetoDemoButton" type="button">Demo PASETO secure</button>
-        </div>
 
         <div class="profile-strip">
           <div class="profile-cell">
@@ -52,13 +46,40 @@
       <section>
         <div class="panel token-panel">
           <h2>Token</h2>
-          <p class="muted" id="tokenHint">Pilih demo JWT atau PASETO untuk membuat token.</p>
+          <p class="muted" id="tokenHint">Mode aktif sedang disinkronkan dari presenter.</p>
           <textarea id="tokenBox" spellcheck="false" placeholder="Token akan muncul di sini setelah nama dikirim."></textarea>
           <div class="button-row" style="margin-top: 14px;">
             <button class="primary-button" id="accessButton" type="button">Akses brankas rahasia</button>
             <button class="quiet-button" id="copyButton" type="button">Salin token</button>
-            <button class="quiet-button" id="tamperButton" type="button">Rusak 1 karakter</button>
+            <button class="quiet-button" id="tamperButton" type="button" hidden>Rusak 1 karakter</button>
             <button class="danger-button" id="forgeButton" type="button">Forge JWT ADMIN</button>
+          </div>
+        </div>
+
+        <div class="panel decoder-panel">
+          <div class="decoder-toolbar">
+            <div>
+              <p class="eyebrow">Inspect token</p>
+              <h2>Decoder Token</h2>
+            </div>
+            <button class="quiet-button" id="decodeButton" type="button">Decode token</button>
+          </div>
+          <p class="muted">Decode hanya membaca struktur dan isi yang terlihat. Hasil ini tidak membuktikan bahwa signature token valid.</p>
+          <p class="decoder-summary" id="decoderSummary" aria-live="polite">Ambil token, lalu klik Decode token untuk melihat isinya.</p>
+
+          <div class="decoder-grid" id="decoderDetails" hidden>
+            <article class="decoder-part">
+              <span id="decoderHeaderLabel">Header</span>
+              <pre id="decoderHeader">-</pre>
+            </article>
+            <article class="decoder-part">
+              <span id="decoderPayloadLabel">Payload</span>
+              <pre id="decoderPayload">-</pre>
+            </article>
+            <article class="decoder-part">
+              <span id="decoderSignatureLabel">Signature</span>
+              <pre id="decoderSignature">-</pre>
+            </article>
           </div>
         </div>
 
