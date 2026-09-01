@@ -258,24 +258,6 @@ h2 {
   opacity: 0.48;
 }
 
-.access-status {
-  min-height: 42px;
-  margin-bottom: 16px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 209, 102, 0.35);
-  border-radius: 8px;
-  color: var(--yellow);
-  background: rgba(255, 209, 102, 0.08);
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
-
-.access-status.authorized {
-  border-color: rgba(61, 220, 151, 0.35);
-  color: var(--green);
-  background: rgba(61, 220, 151, 0.08);
-}
-
 .button-row {
   display: flex;
   flex-wrap: wrap;

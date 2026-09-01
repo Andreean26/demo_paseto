@@ -42,26 +42,23 @@ Jika berhasil, terminal akan menampilkan URL seperti ini:
 ```text
 Live Demo PASETO running
 Audience : http://localhost:8080/audience.html
-Presenter: http://localhost:8080/presenter.html?key=<kunci-presenter>
+Presenter: http://localhost:8080/presenter.html
 LAN URLs :
   Audience : http://192.168.x.x:8080/audience.html
-  Presenter: http://192.168.x.x:8080/presenter.html?key=<kunci-presenter>
+  Presenter: http://192.168.x.x:8080/presenter.html
 ```
 
 ## Buka Halaman Demo
 
 Di laptop presenter:
 
-- Buka URL `Presenter` lengkap yang dicetak di terminal. URL tersebut berisi kunci acak untuk mengaktifkan kontrol mode.
-- Jangan bagikan URL presenter kepada peserta.
+- Buka URL `Presenter` yang dicetak di terminal untuk mengubah mode dan menampilkan event.
 
 Di HP peserta:
 
 - Bagikan hanya URL `Audience` pada bagian `LAN URLs`.
 - Contoh: `http://192.168.x.x:8080/audience.html`
 - Pastikan laptop dan HP berada di Wi-Fi yang sama.
-
-Kunci presenter dibuat ulang setiap kali server dijalankan. Setelah URL presenter dibuka, kunci disimpan untuk tab tersebut dan dihapus dari address bar.
 
 ## Alur Demo JWT Rentan
 
@@ -153,8 +150,8 @@ demo_paseto/
 | Method | Path | Fungsi |
 | --- | --- | --- |
 | `GET` | `/api/state` | Melihat mode aktif dan event terbaru. |
-| `POST` | `/api/mode` | Mengganti mode ke `jwt` atau `paseto`; wajib header `x-presenter-key`. |
-| `POST` | `/api/reset` | Menghapus event presenter; wajib header `x-presenter-key`. |
+| `POST` | `/api/mode` | Mengganti mode ke `jwt` atau `paseto`. |
+| `POST` | `/api/reset` | Menghapus event presenter. |
 | `POST` | `/api/auth/generate` | Membuat token role `USER`. |
 | `POST` | `/api/vault/access` | Menguji akses brankas memakai token di header `Authorization`. |
 | `GET` | `/events` | Stream mode dan event real-time untuk presenter serta audience. |
@@ -172,14 +169,6 @@ Secret demo bisa diganti dengan environment variable:
 ```bash
 JWT_DEMO_SECRET="secret-jwt-demo" PASETO_DEMO_KEY="secret-paseto-demo" npm start
 ```
-
-Kunci presenter default dibuat acak saat startup. Jika perlu URL presenter yang stabil selama pengembangan, tetapkan sendiri:
-
-```bash
-PRESENTER_KEY="kunci-presenter-lokal" npm start
-```
-
-Jangan bagikan nilai `PRESENTER_KEY` atau URL presenter kepada audience.
 
 ## Troubleshooting
 
@@ -205,10 +194,10 @@ Jika presenter tidak menerima event:
 
 - Refresh halaman presenter.
 - Pastikan server masih berjalan.
-- Buka ulang URL `Presenter` lengkap yang dicetak di terminal, bukan `/presenter.html` tanpa kunci.
+- Buka ulang URL `Presenter` yang dicetak di terminal.
 
 ## Catatan Keamanan
 
-Demo ini dibuat untuk edukasi. Mode JWT memang sengaja dibuat rentan agar serangan `alg:none` mudah dipahami. Jangan menggunakan logic JWT rentan dari demo ini untuk aplikasi produksi.
+Demo ini dibuat untuk edukasi. Kontrol presenter tidak memakai key, jadi jalankan demo hanya di lingkungan tepercaya. Mode JWT memang sengaja dibuat rentan agar serangan `alg:none` mudah dipahami. Jangan menggunakan logic JWT rentan dari demo ini untuk aplikasi produksi.
 
 Implementasi secure lokal memakai AEAD `AES-256-GCM` dengan prefix `v4.local` agar demo bisa berjalan tanpa dependency eksternal. Untuk implementasi produksi, gunakan library PASETO resmi dan audit konfigurasi kunci dengan serius.

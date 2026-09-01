@@ -9,8 +9,6 @@ const path = require('path');
 const PORT = Number(process.env.PORT || 8080);
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const JWT_SECRET = process.env.JWT_DEMO_SECRET || 'live-demo-jwt-secret';
-const PRESENTER_KEY =
-  String(process.env.PRESENTER_KEY || '').trim() || crypto.randomBytes(24).toString('base64url');
 const SECURE_KEY = crypto
   .createHash('sha256')
   .update(process.env.PASETO_DEMO_KEY || 'live-demo-paseto-style-local-key')
@@ -61,25 +59,6 @@ function readJson(req) {
     });
     req.on('error', reject);
   });
-}
-
-function hasValidPresenterKey(req) {
-  const receivedKey = String(req.headers['x-presenter-key'] || '');
-  const expected = Buffer.from(PRESENTER_KEY);
-  const received = Buffer.from(receivedKey);
-  return received.length === expected.length && crypto.timingSafeEqual(received, expected);
-}
-
-function requirePresenter(req, res) {
-  if (hasValidPresenterKey(req)) {
-    return true;
-  }
-
-  sendJson(res, 403, {
-    ok: false,
-    error: 'Kontrol ini hanya tersedia untuk presenter.'
-  });
-  return false;
 }
 
 function makeJwt(name) {
@@ -252,10 +231,6 @@ async function handleApi(req, res) {
   }
 
   if (req.method === 'POST' && pathname === '/api/mode') {
-    if (!requirePresenter(req, res)) {
-      return;
-    }
-
     const body = await readJson(req);
     if (body.mode !== 'jwt' && body.mode !== 'paseto') {
       sendJson(res, 400, { ok: false, error: 'Mode harus jwt atau paseto.' });
@@ -273,10 +248,6 @@ async function handleApi(req, res) {
   }
 
   if (req.method === 'POST' && pathname === '/api/reset') {
-    if (!requirePresenter(req, res)) {
-      return;
-    }
-
     events = [];
     broadcast('snapshot', { mode, events });
     sendJson(res, 200, { ok: true, mode, events });
@@ -401,15 +372,14 @@ function startServer() {
       }
     }
 
-    const presenterPath = `/presenter.html?key=${encodeURIComponent(PRESENTER_KEY)}`;
     console.log('Live Demo PASETO running');
     console.log(`Audience : ${urls[0]}/audience.html`);
-    console.log(`Presenter: ${urls[0]}${presenterPath}`);
+    console.log(`Presenter: ${urls[0]}/presenter.html`);
     if (urls.length > 1) {
       console.log('LAN URLs :');
       for (const url of urls.slice(1)) {
         console.log(`  Audience : ${url}/audience.html`);
-        console.log(`  Presenter: ${url}${presenterPath}`);
+        console.log(`  Presenter: ${url}/presenter.html`);
       }
     }
   });

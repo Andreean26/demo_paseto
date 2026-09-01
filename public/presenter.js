@@ -9,61 +9,15 @@ const headline = document.querySelector('#headline');
 const subline = document.querySelector('#subline');
 const eventList = document.querySelector('#eventList');
 const audienceUrl = document.querySelector('#audienceUrl');
-const presenterAccess = document.querySelector('#presenterAccess');
-
-const presenterKeyStorage = 'demo-paseto-presenter-key';
-const query = new URLSearchParams(window.location.search);
-let presenterKey = query.get('key') || sessionStorage.getItem(presenterKeyStorage) || '';
-
-if (query.has('key')) {
-  if (presenterKey) {
-    sessionStorage.setItem(presenterKeyStorage, presenterKey);
-  }
-  query.delete('key');
-  const cleanQuery = query.toString();
-  const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash}`;
-  window.history.replaceState({}, '', cleanUrl);
-}
-
-function setControlAvailability() {
-  const authorized = Boolean(presenterKey);
-  modeToggle.disabled = !authorized;
-  resetButton.disabled = !authorized;
-  presenterAccess.textContent = authorized
-    ? 'Akses presenter aktif. Perubahan mode akan disiarkan ke seluruh audience.'
-    : 'Mode hanya-baca. Buka URL Presenter yang dicetak di terminal server.';
-  presenterAccess.classList.toggle('authorized', authorized);
-}
-
-function revokePresenterAccess() {
-  presenterKey = '';
-  sessionStorage.removeItem(presenterKeyStorage);
-  setControlAvailability();
-}
 
 async function presenterPost(path, body) {
-  if (!presenterKey) {
-    return {
-      response: null,
-      payload: { ok: false, error: 'Kunci presenter tidak tersedia.' }
-    };
-  }
-
-  const headers = { 'x-presenter-key': presenterKey };
-  if (body) {
-    headers['content-type'] = 'application/json';
-  }
-
   try {
     const response = await fetch(path, {
       method: 'POST',
-      headers,
+      headers: body ? { 'content-type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined
     });
     const payload = await response.json();
-    if (response.status === 403) {
-      revokePresenterAccess();
-    }
     return { response, payload };
   } catch {
     return {
@@ -132,7 +86,7 @@ async function changeMode() {
   if (!response || !response.ok) {
     await loadState().catch(() => {});
     subline.textContent = payload.error || 'Mode gagal diganti.';
-    setControlAvailability();
+    modeToggle.disabled = false;
     return;
   }
 
@@ -143,7 +97,7 @@ async function changeMode() {
       ? 'Sekarang token secure akan menolak modifikasi satu karakter pun.'
       : 'Mode JWT rentan aktif. Biarkan audiens mencoba alg:none.';
   alertPanel.classList.remove('breach');
-  setControlAvailability();
+  modeToggle.disabled = false;
 }
 
 async function resetEvents() {
@@ -151,7 +105,7 @@ async function resetEvents() {
   const { response, payload } = await presenterPost('/api/reset');
   if (!response || !response.ok) {
     subline.textContent = payload.error || 'Event gagal dibersihkan.';
-    setControlAvailability();
+    resetButton.disabled = false;
     return;
   }
 
@@ -159,7 +113,7 @@ async function resetEvents() {
   headline.textContent = 'Sistem menunggu';
   subline.textContent = 'Belum ada peserta yang berhasil membuka brankas.';
   alertPanel.classList.remove('breach');
-  setControlAvailability();
+  resetButton.disabled = false;
 }
 
 function connectEvents() {
@@ -191,7 +145,6 @@ function connectEvents() {
 audienceUrl.textContent = `${window.location.origin}/audience.html`;
 modeToggle.addEventListener('change', changeMode);
 resetButton.addEventListener('click', resetEvents);
-setControlAvailability();
 
 loadState().then(connectEvents).catch(() => {
   eventList.textContent = 'Tidak bisa terhubung ke server.';

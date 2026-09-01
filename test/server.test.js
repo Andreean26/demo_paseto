@@ -5,7 +5,6 @@ const { EventEmitter } = require('node:events');
 const { PassThrough } = require('node:stream');
 const test = require('node:test');
 
-process.env.PRESENTER_KEY = 'test-presenter-key';
 const { handleApi, handleEvents } = require('../server');
 
 async function requestApi(method, url, { body, headers = {} } = {}) {
@@ -46,34 +45,9 @@ function parseSse(packet) {
   return { event, data: JSON.parse(data) };
 }
 
-test('only the presenter can change mode and audience clients receive the change over SSE', async () => {
-  const unauthorized = await requestApi('POST', '/api/mode', {
-    body: { mode: 'paseto' },
-    headers: { 'content-type': 'application/json' }
-  });
-  assert.equal(unauthorized.status, 403);
-
-  const wrongKey = await requestApi('POST', '/api/mode', {
-    body: { mode: 'paseto' },
-    headers: {
-      'content-type': 'application/json',
-      'x-presenter-key': 'audience-key'
-    }
-  });
-  assert.equal(wrongKey.status, 403);
-
-  const unauthorizedReset = await requestApi('POST', '/api/reset');
-  assert.equal(unauthorizedReset.status, 403);
-
-  const unchangedState = await requestApi('GET', '/api/state');
-  assert.equal(unchangedState.json.mode, 'jwt');
-
+test('mode can be changed without an authorization header and clients receive the change over SSE', async () => {
   const invalidMode = await requestApi('POST', '/api/mode', {
-    body: { mode: 'unknown' },
-    headers: {
-      'content-type': 'application/json',
-      'x-presenter-key': 'test-presenter-key'
-    }
+    body: { mode: 'unknown' }
   });
   assert.equal(invalidMode.status, 400);
 
@@ -96,11 +70,7 @@ test('only the presenter can change mode and audience clients receive the change
   assert.equal(snapshot.data.mode, 'jwt');
 
   const changed = await requestApi('POST', '/api/mode', {
-    body: { mode: 'paseto' },
-    headers: {
-      'content-type': 'application/json',
-      'x-presenter-key': 'test-presenter-key'
-    }
+    body: { mode: 'paseto' }
   });
   assert.equal(changed.status, 200);
   assert.equal(changed.json.mode, 'paseto');
@@ -111,5 +81,13 @@ test('only the presenter can change mode and audience clients receive the change
 
   const changedState = await requestApi('GET', '/api/state');
   assert.equal(changedState.json.mode, 'paseto');
+
+  const reset = await requestApi('POST', '/api/reset');
+  assert.equal(reset.status, 200);
+  assert.deepEqual(reset.json.events, []);
+
+  const resetSnapshot = parseSse(packets[2]);
+  assert.equal(resetSnapshot.event, 'snapshot');
+  assert.deepEqual(resetSnapshot.data.events, []);
   streamRequest.emit('close');
 });
