@@ -444,6 +444,120 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.paseto-format-container {
+  margin-top: 18px;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.paseto-format-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--cyan);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.format-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.format-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.format-card input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.format-card:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
+}
+
+.format-card.active {
+  border-color: rgba(103, 212, 255, 0.65);
+  background: rgba(103, 212, 255, 0.09);
+  box-shadow: 0 0 0 1px rgba(103, 212, 255, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.format-card.active[data-format="v4.local"],
+.format-card.active[data-format="v3.local"] {
+  border-color: rgba(61, 220, 151, 0.65);
+  background: rgba(61, 220, 151, 0.09);
+  box-shadow: 0 0 0 1px rgba(61, 220, 151, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.format-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.format-card-header strong {
+  font-size: 0.96rem;
+  color: var(--text);
+}
+
+.format-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.format-badge.public {
+  color: var(--cyan);
+  background: rgba(103, 212, 255, 0.18);
+  border: 1px solid rgba(103, 212, 255, 0.4);
+}
+
+.format-badge.local {
+  color: var(--green);
+  background: rgba(61, 220, 151, 0.18);
+  border: 1px solid rgba(61, 220, 151, 0.4);
+}
+
+.format-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .decoder-panel {
   margin-top: 22px;
 }

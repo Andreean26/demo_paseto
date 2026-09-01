@@ -11,6 +11,8 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@noble/ciphers": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
     "jsonwebtoken": "^9.0.3",
     "paseto": "^3.1.4"
   }

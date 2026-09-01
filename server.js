@@ -7,6 +7,8 @@ const os = require('os');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const { V3, V4 } = require('paseto');
+const { blake2b } = require('@noble/hashes/blake2.js');
+const { xchacha20 } = require('@noble/ciphers/chacha.js');
 
 const PORT = Number(process.env.PORT || 8080);
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -14,15 +16,83 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 // JWT: secret untuk membuat dan memverifikasi signature HMAC-SHA256
 const JWT_SECRET = process.env.JWT_DEMO_SECRET || 'live-demo-jwt-secret-key-32-chars-long';
 
-// PASETO: symmetric key untuk v3.local
+// PASETO: symmetric key untuk v4.local & v3.local (32 bytes)
 const PASETO_LOCAL_RAW = crypto
   .createHash('sha256')
   .update(process.env.PASETO_DEMO_KEY || 'live-demo-paseto-local-key-32-bytes')
   .digest();
 const PASETO_LOCAL_KEY = crypto.createSecretKey(PASETO_LOCAL_RAW);
 
-// Asymmetric keys untuk JWT (Ed25519) dan PASETO (v4.public)
+// Asymmetric keys untuk JWT (Ed25519) dan PASETO (v4.public / v3.public)
 const ASYMMETRIC_ED_KEYPAIR = crypto.generateKeyPairSync('ed25519');
+const ASYMMETRIC_EC_KEYPAIR = crypto.generateKeyPairSync('ec', { namedCurve: 'secp384r1' });
+
+// ===== PASETO v4.local Helper Functions (XChaCha20-Poly1305 + BLAKE2b) =====
+function le64(n) {
+  const buf = Buffer.alloc(8);
+  buf.writeBigUInt64LE(BigInt(n));
+  return buf;
+}
+
+function pae(pieces) {
+  const bufs = [le64(pieces.length)];
+  for (const piece of pieces) {
+    const pBuf = Buffer.isBuffer(piece) ? piece : Buffer.from(piece);
+    bufs.push(le64(pBuf.length));
+    bufs.push(pBuf);
+  }
+  return Buffer.concat(bufs);
+}
+
+function v4LocalEncrypt(payload, key, footer = Buffer.alloc(0), implicit = Buffer.alloc(0)) {
+  const k = Buffer.isBuffer(key) ? key : Buffer.from(key);
+  const m = Buffer.isBuffer(payload)
+    ? payload
+    : Buffer.from(typeof payload === 'string' ? payload : JSON.stringify(payload));
+  const n = crypto.randomBytes(32);
+
+  const Ek = blake2b(Buffer.concat([Buffer.from([0x80]), n]), { key: k, dkLen: 32 });
+  const Ak = blake2b(Buffer.concat([Buffer.from([0x81]), n]), { key: k, dkLen: 32 });
+  const n2 = blake2b(Buffer.concat([Buffer.from([0x82]), n]), { key: k, dkLen: 24 });
+
+  const c = xchacha20(Ek, n2, m);
+  const preAuth = pae([Buffer.from('v4.local.'), n, Buffer.from(c), footer, implicit]);
+  const t = blake2b(preAuth, { key: Ak, dkLen: 32 });
+
+  const body = Buffer.concat([n, Buffer.from(c), Buffer.from(t)]);
+  return 'v4.local.' + body.toString('base64url') + (footer.length ? '.' + footer.toString('base64url') : '');
+}
+
+function v4LocalDecrypt(token, key, implicit = Buffer.alloc(0)) {
+  const k = Buffer.isBuffer(key) ? key : Buffer.from(key);
+  const parts = token.split('.');
+  if (parts.length < 3 || parts[0] !== 'v4' || parts[1] !== 'local') {
+    throw new Error('Format token v4.local tidak valid');
+  }
+  const body = Buffer.from(parts[2], 'base64url');
+  const footer = parts[3] ? Buffer.from(parts[3], 'base64url') : Buffer.alloc(0);
+
+  if (body.length < 64) {
+    throw new Error('Token v4.local terlalu pendek');
+  }
+
+  const n = body.subarray(0, 32);
+  const t = body.subarray(body.length - 32);
+  const c = body.subarray(32, body.length - 32);
+
+  const Ak = blake2b(Buffer.concat([Buffer.from([0x81]), n]), { key: k, dkLen: 32 });
+  const preAuth = pae([Buffer.from('v4.local.'), n, c, footer, implicit]);
+  const expectedT = blake2b(preAuth, { key: Ak, dkLen: 32 });
+
+  if (!crypto.timingSafeEqual(t, Buffer.from(expectedT))) {
+    throw new Error('Tag autentikasi v4.local tidak valid (token rusak / dimodifikasi)');
+  }
+
+  const Ek = blake2b(Buffer.concat([Buffer.from([0x80]), n]), { key: k, dkLen: 32 });
+  const n2 = blake2b(Buffer.concat([Buffer.from([0x82]), n]), { key: k, dkLen: 24 });
+  const decrypted = xchacha20(Ek, n2, c);
+  return JSON.parse(Buffer.from(decrypted).toString('utf8'));
+}
 
 let mode = 'jwt';
 let events = [];
@@ -101,24 +171,45 @@ function verifyJwtVulnerable(token) {
   };
 }
 
-// ===== Standard PASETO with panva/paseto =====
-async function makeSecureLocalToken(name) {
-  return await V3.encrypt(
-    {
-      name,
-      role: 'USER',
-      iat: Math.floor(Date.now() / 1000)
-    },
-    PASETO_LOCAL_KEY
-  );
+// ===== PASETO Token Generation & Verification =====
+async function makeSecureToken(name, format = 'v4.local') {
+  const payload = {
+    name,
+    role: 'USER',
+    iat: Math.floor(Date.now() / 1000)
+  };
+
+  if (format === 'v4.local') {
+    return v4LocalEncrypt(payload, PASETO_LOCAL_RAW);
+  }
+  if (format === 'v3.local') {
+    return await V3.encrypt(payload, PASETO_LOCAL_KEY);
+  }
+  if (format === 'v3.public') {
+    return await V3.sign(payload, ASYMMETRIC_EC_KEYPAIR.privateKey);
+  }
+  return await V4.sign(payload, ASYMMETRIC_ED_KEYPAIR.privateKey);
 }
 
-async function verifySecureLocalToken(token) {
-  if (!token.startsWith('v3.local.') && !token.startsWith('v4.local.')) {
-    throw new Error('Token secure harus berformat v3.local atau v4.local');
+const makeSecureLocalToken = (name) => makeSecureToken(name, 'v4.local');
+
+async function verifySecureToken(token) {
+  if (token.startsWith('v4.local.')) {
+    return v4LocalDecrypt(token, PASETO_LOCAL_RAW);
   }
-  return await V3.decrypt(token, PASETO_LOCAL_KEY);
+  if (token.startsWith('v3.local.')) {
+    return await V3.decrypt(token, PASETO_LOCAL_KEY);
+  }
+  if (token.startsWith('v4.public.')) {
+    return await V4.verify(token, ASYMMETRIC_ED_KEYPAIR.publicKey);
+  }
+  if (token.startsWith('v3.public.')) {
+    return await V3.verify(token, ASYMMETRIC_EC_KEYPAIR.publicKey);
+  }
+  throw new Error('Token secure harus berformat v4.local, v4.public, v3.local, atau v3.public');
 }
+
+const verifySecureLocalToken = verifySecureToken;
 
 function addEvent(type, payload) {
   const event = {
@@ -312,8 +403,8 @@ async function runBenchmarkEngine(options = {}) {
   for (let i = 0; i < 20; i++) {
     const tJwtHs = jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
     jwt.verify(tJwtHs, JWT_SECRET, { algorithms: ['HS256'] });
-    const tPasLoc = await V3.encrypt(payload, PASETO_LOCAL_KEY);
-    await V3.decrypt(tPasLoc, PASETO_LOCAL_KEY);
+    const tPasLoc = v4LocalEncrypt(payload, PASETO_LOCAL_RAW);
+    v4LocalDecrypt(tPasLoc, PASETO_LOCAL_RAW);
     const tPasPub = await V4.sign(payload, ASYMMETRIC_ED_KEYPAIR.privateKey);
     await V4.verify(tPasPub, ASYMMETRIC_ED_KEYPAIR.publicKey);
   }
@@ -376,13 +467,13 @@ async function runBenchmarkEngine(options = {}) {
     }
   };
 
-  // ===== 2. PASETO v3.local (Symmetric AEAD Encrypt & Decrypt) =====
+  // ===== 2. PASETO v4.local (Symmetric AEAD Encrypt & Decrypt) =====
   const pasetoLocEncLatencies = [];
   let samplePasetoLoc = '';
   const startPasetoLocEnc = process.hrtime.bigint();
   for (let i = 0; i < iterations; i++) {
     const t0 = process.hrtime.bigint();
-    samplePasetoLoc = await V3.encrypt(payload, PASETO_LOCAL_KEY);
+    samplePasetoLoc = v4LocalEncrypt(payload, PASETO_LOCAL_RAW);
     const t1 = process.hrtime.bigint();
     pasetoLocEncLatencies.push(Number(t1 - t0) / 1000);
   }
@@ -393,7 +484,7 @@ async function runBenchmarkEngine(options = {}) {
   const startPasetoLocDec = process.hrtime.bigint();
   for (let i = 0; i < iterations; i++) {
     const t0 = process.hrtime.bigint();
-    await V3.decrypt(samplePasetoLoc, PASETO_LOCAL_KEY);
+    v4LocalDecrypt(samplePasetoLoc, PASETO_LOCAL_RAW);
     const t1 = process.hrtime.bigint();
     pasetoLocDecLatencies.push(Number(t1 - t0) / 1000);
   }
@@ -401,8 +492,8 @@ async function runBenchmarkEngine(options = {}) {
   const totalPasetoLocDecMs = Number(endPasetoLocDec - startPasetoLocDec) / 1e6;
 
   const pasetoLocStats = {
-    name: 'PASETO (v3.local)',
-    type: 'Symmetric AEAD (AES-256-CTR + HMAC-SHA384)',
+    name: 'PASETO (v4.local)',
+    type: 'Symmetric AEAD (XChaCha20-Poly1305 + BLAKE2b)',
     token: samplePasetoLoc,
     charLength: samplePasetoLoc.length,
     byteSize: Buffer.byteLength(samplePasetoLoc),
@@ -410,9 +501,9 @@ async function runBenchmarkEngine(options = {}) {
     overheadBytes: Buffer.byteLength(samplePasetoLoc) - rawPayloadBytes,
     overheadPercentage: Number((((Buffer.byteLength(samplePasetoLoc) - rawPayloadBytes) / rawPayloadBytes) * 100).toFixed(1)),
     structureBreakdown: {
-      headerBytes: 9, // 'v3.local.'
-      payloadBytes: Buffer.byteLength(samplePasetoLoc) - 9 - 48, // Ciphertext & Nonce
-      signatureBytes: 48 // 384-bit Auth Tag
+      headerBytes: 9, // 'v4.local.'
+      payloadBytes: Buffer.byteLength(samplePasetoLoc) - 9 - 32 - 32, // Ciphertext & Nonce
+      signatureBytes: 32 // 256-bit BLAKE2b Auth Tag
     },
     performance: {
       encrypt: {
@@ -553,12 +644,14 @@ async function handleApi(req, res) {
       sendJson(res, 400, { ok: false, error: 'Nama wajib diisi' });
       return;
     }
-    const token = mode === 'jwt' ? makeJwt(name) : await makeSecureLocalToken(name);
+    const pasetoFormat = body.pasetoFormat || 'v4.public';
+    const token = mode === 'jwt' ? makeJwt(name) : await makeSecureToken(name, pasetoFormat);
     sendJson(res, 200, {
       ok: true,
       mode,
       name,
       role: 'USER',
+      pasetoFormat: mode === 'paseto' ? pasetoFormat : undefined,
       token
     });
     return;
@@ -608,7 +701,7 @@ async function handleApi(req, res) {
 
     // PASETO-style mode
     try {
-      const claims = await verifySecureLocalToken(token);
+      const claims = await verifySecureToken(token);
       sendJson(res, 403, {
         ok: false,
         status: 'DENIED',
@@ -711,6 +804,8 @@ module.exports = {
   runBenchmarkEngine,
   makeJwt,
   verifyJwtVulnerable,
+  makeSecureToken,
+  verifySecureToken,
   makeSecureLocalToken,
   verifySecureLocalToken
 };

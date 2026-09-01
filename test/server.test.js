@@ -118,34 +118,71 @@ test('JWT flow with standard jsonwebtoken library: creates token, denies USER ro
   assert.equal(accessAdmin.json.status, 'HACKED');
 });
 
-test('PASETO flow with standard paseto library: creates AEAD v3.local token, denies USER, blocks tampered token', async () => {
+test('PASETO flow: creates v4.local and v4.public tokens, denies USER, blocks tampered tokens', async () => {
   await requestApi('POST', '/api/mode', { body: { mode: 'paseto' } });
 
-  // 1. Generate PASETO token
-  const gen = await requestApi('POST', '/api/auth/generate', {
-    body: { name: 'Citra Dewi' }
+  // 1. Generate v4.local token
+  const genLocal = await requestApi('POST', '/api/auth/generate', {
+    body: { name: 'Citra Dewi', pasetoFormat: 'v4.local' }
   });
-  assert.equal(gen.status, 200);
-  assert.equal(gen.json.mode, 'paseto');
-  assert.ok(gen.json.token.startsWith('v3.local.'));
+  assert.equal(genLocal.status, 200);
+  assert.equal(genLocal.json.mode, 'paseto');
+  assert.ok(genLocal.json.token.startsWith('v4.local.'));
 
-  // 2. Normal USER PASETO token gets DENIED (role USER)
-  const accessUser = await requestApi('POST', '/api/vault/access', {
-    headers: { authorization: `Bearer ${gen.json.token}` }
+  // 2. Normal USER v4.local token gets DENIED (role USER)
+  const accessLocal = await requestApi('POST', '/api/vault/access', {
+    headers: { authorization: `Bearer ${genLocal.json.token}` }
   });
-  assert.equal(accessUser.status, 403);
-  assert.equal(accessUser.json.status, 'DENIED');
+  assert.equal(accessLocal.status, 403);
+  assert.equal(accessLocal.json.status, 'DENIED');
 
-  // 3. Tampered PASETO token (1 character changed) gets BLOCKED
-  const originalToken = gen.json.token;
-  const lastChar = originalToken.slice(-1);
-  const tamperedToken = originalToken.slice(0, -1) + (lastChar === 'A' ? 'B' : 'A');
+  // 3. Tampered v4.local token gets BLOCKED
+  const origLocal = genLocal.json.token;
+  const idxLoc = origLocal.length - 5;
+  const tamperedLocal = origLocal.slice(0, idxLoc) + (origLocal[idxLoc] === 'a' ? 'b' : 'a') + origLocal.slice(idxLoc + 1);
 
-  const accessTampered = await requestApi('POST', '/api/vault/access', {
-    headers: { authorization: `Bearer ${tamperedToken}` }
+  const accessTamperedLocal = await requestApi('POST', '/api/vault/access', {
+    headers: { authorization: `Bearer ${tamperedLocal}` }
   });
-  assert.equal(accessTampered.status, 401);
-  assert.equal(accessTampered.json.status, 'BLOCKED');
+  assert.equal(accessTamperedLocal.status, 401);
+  assert.equal(accessTamperedLocal.json.status, 'BLOCKED');
+
+  // 4. Generate v4.public token
+  const genPublic = await requestApi('POST', '/api/auth/generate', {
+    body: { name: 'Citra Dewi', pasetoFormat: 'v4.public' }
+  });
+  assert.equal(genPublic.status, 200);
+  assert.equal(genPublic.json.mode, 'paseto');
+  assert.ok(genPublic.json.token.startsWith('v4.public.'));
+
+  // 5. Normal USER v4.public token gets DENIED (role USER)
+  const accessPublic = await requestApi('POST', '/api/vault/access', {
+    headers: { authorization: `Bearer ${genPublic.json.token}` }
+  });
+  assert.equal(accessPublic.status, 403);
+  assert.equal(accessPublic.json.status, 'DENIED');
+
+  // 6. Tampered v4.public token gets BLOCKED
+  const origPublic = genPublic.json.token;
+  const idxPub = origPublic.length - 5;
+  const tamperedPublic = origPublic.slice(0, idxPub) + (origPublic[idxPub] === 'a' ? 'b' : 'a') + origPublic.slice(idxPub + 1);
+
+  const accessTamperedPub = await requestApi('POST', '/api/vault/access', {
+    headers: { authorization: `Bearer ${tamperedPublic}` }
+  });
+  assert.equal(accessTamperedPub.status, 401);
+  assert.equal(accessTamperedPub.json.status, 'BLOCKED');
+
+  // 7. Generate v3.public token
+  const genPub3 = await requestApi('POST', '/api/auth/generate', {
+    body: { name: 'Citra Dewi', pasetoFormat: 'v3.public' }
+  });
+  assert.equal(genPub3.status, 200);
+  assert.ok(genPub3.json.token.startsWith('v3.public.'));
+  const accessPub3 = await requestApi('POST', '/api/vault/access', {
+    headers: { authorization: `Bearer ${genPub3.json.token}` }
+  });
+  assert.equal(accessPub3.status, 403);
 });
 
 test('Benchmark API returns accurate performance metrics and size breakdowns', async () => {
@@ -161,7 +198,7 @@ test('Benchmark API returns accurate performance metrics and size breakdowns', a
   assert.ok(getRes.json.results.jwtHs.performance.sign.opsSec > 0);
   assert.ok(getRes.json.results.pasetoLoc.performance.encrypt.opsSec > 0);
   assert.ok(getRes.json.results.jwtHs.structureBreakdown.headerBytes > 0);
-  assert.ok(getRes.json.results.pasetoLoc.structureBreakdown.signatureBytes === 48);
+  assert.ok(getRes.json.results.pasetoLoc.structureBreakdown.signatureBytes === 32);
 
   // POST benchmark with custom payload
   const postRes = await requestApi('POST', '/api/benchmark', {

@@ -26,6 +26,39 @@
         <form id="nameForm">
           <label for="nameInput">Nama peserta</label>
           <input id="nameInput" name="name" autocomplete="name" placeholder="Tulis nama kamu" required>
+
+          <div id="pasetoFormatContainer" class="paseto-format-container" hidden>
+            <label class="paseto-format-title">Format / Versi PASETO</label>
+            <div class="format-picker" role="radiogroup" aria-label="Format PASETO">
+              <label class="format-card active" data-format="v4.public">
+                <input type="radio" name="pasetoFormat" value="v4.public" checked>
+                <div class="format-card-header">
+                  <span class="format-badge public">PUBLIC</span>
+                  <strong>v4.public</strong>
+                </div>
+                <p class="format-desc">Asimetris (Ed25519) &bull; Payload terbaca &bull; Digital Signature</p>
+              </label>
+
+              <label class="format-card" data-format="v4.local">
+                <input type="radio" name="pasetoFormat" value="v4.local">
+                <div class="format-card-header">
+                  <span class="format-badge local">LOCAL</span>
+                  <strong>v4.local</strong>
+                </div>
+                <p class="format-desc">Simetris AEAD (XChaCha20-Poly1305) &bull; Payload terenkripsi penuh (Opaque)</p>
+              </label>
+
+              <label class="format-card" data-format="v3.public">
+                <input type="radio" name="pasetoFormat" value="v3.public">
+                <div class="format-card-header">
+                  <span class="format-badge public">PUBLIC</span>
+                  <strong>v3.public</strong>
+                </div>
+                <p class="format-desc">Asimetris (ECDSA P-384) &bull; Standar NIST &bull; Payload terbaca</p>
+              </label>
+            </div>
+          </div>
+
           <div class="button-row" style="margin-top: 14px;">
             <button class="quiet-button" type="submit">Ambil token mode aktif</button>
           </div>

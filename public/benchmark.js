@@ -123,7 +123,7 @@ function updateCharts(results) {
     chartSignOps,
     [
       { label: 'JWT (HS256 Sign)', value: jwtHs.performance.sign.opsSec, colorClass: 'cyan' },
-      { label: 'PASETO (v3.local Encrypt AEAD)', value: pasetoLoc.performance.encrypt.opsSec, colorClass: 'green' },
+      { label: 'PASETO (v4.local Encrypt AEAD)', value: pasetoLoc.performance.encrypt.opsSec, colorClass: 'green' },
       { label: 'PASETO (v4.public Ed25519 Sign)', value: pasetoPub.performance.sign.opsSec, colorClass: 'yellow' }
     ],
     { unit: 'ops/sec' }
@@ -134,7 +134,7 @@ function updateCharts(results) {
     chartVerifyOps,
     [
       { label: 'JWT (HS256 Verify)', value: jwtHs.performance.verify.opsSec, colorClass: 'cyan' },
-      { label: 'PASETO (v3.local Decrypt AEAD)', value: pasetoLoc.performance.decrypt.opsSec, colorClass: 'green' },
+      { label: 'PASETO (v4.local Decrypt AEAD)', value: pasetoLoc.performance.decrypt.opsSec, colorClass: 'green' },
       { label: 'PASETO (v4.public Ed25519 Verify)', value: pasetoPub.performance.verify.opsSec, colorClass: 'yellow' }
     ],
     { unit: 'ops/sec' }
@@ -146,7 +146,7 @@ function updateCharts(results) {
     [
       { label: 'Raw Payload JSON', value: jwtHs.rawPayloadBytes, colorClass: 'muted-bar' },
       { label: 'JWT (HS256)', value: jwtHs.byteSize, colorClass: 'cyan' },
-      { label: 'PASETO (v3.local)', value: pasetoLoc.byteSize, colorClass: 'green' },
+      { label: 'PASETO (v4.local)', value: pasetoLoc.byteSize, colorClass: 'green' },
       { label: 'PASETO (v4.public)', value: pasetoPub.byteSize, colorClass: 'yellow' }
     ],
     { unit: 'bytes' }
@@ -157,7 +157,7 @@ function updateCharts(results) {
     chartOverhead,
     [
       { label: 'JWT (HS256) Overhead', value: Math.max(0, jwtHs.overheadPercentage), colorClass: 'cyan' },
-      { label: 'PASETO (v3.local) Overhead', value: Math.max(0, pasetoLoc.overheadPercentage), colorClass: 'green' },
+      { label: 'PASETO (v4.local) Overhead', value: Math.max(0, pasetoLoc.overheadPercentage), colorClass: 'green' },
       { label: 'PASETO (v4.public) Overhead', value: Math.max(0, pasetoPub.overheadPercentage), colorClass: 'yellow' }
     ],
     { unit: '%' }
@@ -173,8 +173,8 @@ function updateCharts(results) {
       roundtrip: jwtHs.performance.roundtrip
     },
     {
-      name: 'PASETO (v3.local)',
-      type: 'AES-256-CTR + HMAC-SHA384 (AEAD)',
+      name: 'PASETO (v4.local)',
+      type: 'XChaCha20-Poly1305 + BLAKE2b (AEAD)',
       signStats: pasetoLoc.performance.encrypt.stats,
       roundtrip: pasetoLoc.performance.roundtrip
     },
@@ -250,7 +250,7 @@ function updateStructureBreakdown(results) {
     </div>
   `;
 
-  // 2. PASETO (v3.local) -> Purple (Header Prefix) | Green (Ciphertext) | Amber (AEAD Tag)
+  // 2. PASETO (v4.local) -> Purple (Header Prefix) | Green (Ciphertext & Nonce) | Amber (BLAKE2b Tag)
   const locH = pasetoLoc.structureBreakdown.headerBytes;
   const locP = Math.max(1, pasetoLoc.structureBreakdown.payloadBytes);
   const locS = pasetoLoc.structureBreakdown.signatureBytes;
@@ -263,7 +263,7 @@ function updateStructureBreakdown(results) {
   pasetoLocSegmentedBar.innerHTML = `
     <div class="seg seg-header" style="width: ${locHpct}%" title="Prefix: ${locH}B (${locHpct}%)"></div>
     <div class="seg seg-ciphertext" style="width: ${locPpct}%" title="Ciphertext & Nonce: ${locP}B (${locPpct}%)"></div>
-    <div class="seg seg-auth-tag" style="width: ${locSpct}%" title="AEAD Tag: ${locS}B (${locSpct}%)"></div>
+    <div class="seg seg-auth-tag" style="width: ${locSpct}%" title="BLAKE2b Tag: ${locS}B (${locSpct}%)"></div>
   `;
 
   pasetoLocLegendGrid.innerHTML = `
@@ -273,7 +273,7 @@ function updateStructureBreakdown(results) {
         <span class="legend-card-title">Header Prefix</span>
         <span class="legend-card-size purple-text">${locH} Bytes (${locHpct}%)</span>
       </div>
-      <div class="legend-card-detail">Header protokol <code>v3.local.</code> konstan</div>
+      <div class="legend-card-detail">Header protokol <code>v4.local.</code> konstan</div>
     </div>
     <div class="legend-card">
       <div class="legend-card-top">
@@ -281,7 +281,7 @@ function updateStructureBreakdown(results) {
         <span class="legend-card-title">Ciphertext & Nonce</span>
         <span class="legend-card-size green-text">${locP} Bytes (${locPpct}%)</span>
       </div>
-      <div class="legend-card-detail">AES-256-CTR Terenkripsi + 32-Byte Nonce Dinamis</div>
+      <div class="legend-card-detail">XChaCha20 Terenkripsi + 32-Byte Nonce Dinamis</div>
     </div>
     <div class="legend-card">
       <div class="legend-card-top">
@@ -289,7 +289,7 @@ function updateStructureBreakdown(results) {
         <span class="legend-card-title">AEAD Auth Tag</span>
         <span class="legend-card-size yellow-text">${locS} Bytes (${locSpct}%)</span>
       </div>
-      <div class="legend-card-detail">48-Byte HMAC-SHA384 Authentication Tag</div>
+      <div class="legend-card-detail">32-Byte BLAKE2b Authentication Tag</div>
     </div>
   `;
 
