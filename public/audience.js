@@ -40,8 +40,8 @@ function setModeText(mode) {
   modeLabel.textContent = secure ? 'PASETO Secure' : 'JWT Vulnerable';
   tokenHint.textContent =
     secure
-      ? 'Token PASETO-style memakai prefix v4.local dan payload-nya terenkripsi. Coba rusak satu karakter, lalu akses brankas.'
-      : 'Token JWT bisa dibaca. Coba Forge JWT ADMIN, lalu akses brankas.';
+      ? 'Token PASETO memakai library standar (v3.local / AEAD) dan payload-nya terenkripsi. Coba rusak satu karakter, lalu akses brankas.'
+      : 'Token JWT dibuat dengan library standar jsonwebtoken. Coba Forge JWT ADMIN, lalu akses brankas.';
   tamperButton.hidden = !secure;
   forgeButton.hidden = secure;
 }
@@ -110,6 +110,7 @@ function decodeBase64UrlJson(value, partName) {
   }
 }
 
+// ===== JWT: struktur header dan payload dapat dibaca langsung di browser =====
 function inspectJwt(token) {
   const parts = token.split('.');
   if (parts.length !== 3 || !parts[0] || !parts[1]) {
@@ -145,30 +146,66 @@ function inspectJwt(token) {
   );
 }
 
-function inspectSecureToken(token) {
-  const encoded = token.slice('v4.local.'.length);
-  const packed = decodeBase64UrlBytes(encoded);
+// ===== PASETO: hanya struktur token terenkripsi yang ditampilkan =====
+function isPasetoToken(token) {
+  return /^v[1-4]\.(local|public)\./i.test(token);
+}
 
-  showDecoderDetails({
-    headerLabel: 'Header token',
-    header: 'v4.local',
-    payloadLabel: 'Payload terenkripsi',
-    payload: JSON.stringify(
-      {
-        status: 'opaque / tidak dapat dibaca',
-        encodedCharacters: encoded.length,
-        packedBytes: packed.length
-      },
-      null,
-      2
-    ),
-    signatureLabel: 'Autentikasi',
-    signature: 'Nonce, ciphertext, dan authentication tag AEAD dikemas bersama di dalam token.'
-  });
-  setDecoderSummary(
-    'Berbeda dari JWT, payload secure tetap terenkripsi. Audience hanya dapat melihat struktur dan ukurannya tanpa kunci.',
-    'secure'
-  );
+function inspectSecureToken(token) {
+  const match = token.match(/^(v[1-4])\.(local|public)\.(.+)$/i);
+  if (!match) {
+    throw new Error('Format token PASETO tidak valid.');
+  }
+  const version = match[1].toLowerCase();
+  const purpose = match[2].toLowerCase();
+  const body = match[3];
+  const packed = decodeBase64UrlBytes(body);
+
+  if (purpose === 'local') {
+    showDecoderDetails({
+      headerLabel: 'Header PASETO',
+      header: `${version}.${purpose}`,
+      payloadLabel: 'Payload Terenkripsi (AEAD)',
+      payload: JSON.stringify(
+        {
+          version,
+          purpose: 'local (Symmetric AEAD)',
+          status: 'opaque / terenkripsi (tidak dapat dibaca tanpa symmetric key)',
+          encodedLength: body.length,
+          binaryBytes: packed.length
+        },
+        null,
+        2
+      ),
+      signatureLabel: 'Autentikasi & Integritas',
+      signature: 'Nonce, Ciphertext, dan AEAD Authentication Tag dikemas bersama. Perubahan 1 bit akan langsung membatalkan token.'
+    });
+    setDecoderSummary(
+      'Berbeda dari JWT, payload PASETO local terenkripsi sepenuhnya. Penyerang tidak bisa membaca ataupun memodifikasi data.',
+      'secure'
+    );
+  } else {
+    showDecoderDetails({
+      headerLabel: 'Header PASETO',
+      header: `${version}.${purpose}`,
+      payloadLabel: 'Payload PASETO Public',
+      payload: JSON.stringify(
+        {
+          version,
+          purpose: 'public (Asymmetric Signature)',
+          encodedLength: body.length
+        },
+        null,
+        2
+      ),
+      signatureLabel: 'Signature Kriptografi',
+      signature: 'Ditandatangani secara asimetris dengan kunci privat Ed25519/ECDSA.'
+    });
+    setDecoderSummary(
+      'PASETO Public ditandatangani dengan kunci privat kriptografi modern.',
+      'secure'
+    );
+  }
 }
 
 function decodeToken() {
@@ -181,7 +218,7 @@ function decodeToken() {
   }
 
   try {
-    if (token.startsWith('v4.local.')) {
+    if (isPasetoToken(token)) {
       inspectSecureToken(token);
     } else {
       inspectJwt(token);
@@ -303,6 +340,7 @@ async function copyToken() {
   setResult('Token tersalin.', null);
 }
 
+// ===== JWT: simulasi pemalsuan role ADMIN dengan alg:none =====
 function forgeJwt() {
   const name = currentName || nameInput.value.trim() || 'Audience';
   const header = { alg: 'none', typ: 'JWT' };
@@ -317,6 +355,7 @@ function forgeJwt() {
   setResult('JWT palsu dibuat dengan alg:none. Kirim ke brankas saat mode JWT aktif.', null);
 }
 
+// ===== PASETO-style: simulasi perubahan token untuk menguji autentikasi AEAD =====
 function tamperToken() {
   const token = tokenBox.value.trim();
   if (!token) {

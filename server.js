@@ -5,14 +5,24 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const jwt = require('jsonwebtoken');
+const { V3, V4 } = require('paseto');
 
 const PORT = Number(process.env.PORT || 8080);
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const JWT_SECRET = process.env.JWT_DEMO_SECRET || 'live-demo-jwt-secret';
-const SECURE_KEY = crypto
+
+// JWT: secret untuk membuat dan memverifikasi signature HMAC-SHA256
+const JWT_SECRET = process.env.JWT_DEMO_SECRET || 'live-demo-jwt-secret-key-32-chars-long';
+
+// PASETO: symmetric key untuk v3.local
+const PASETO_LOCAL_RAW = crypto
   .createHash('sha256')
-  .update(process.env.PASETO_DEMO_KEY || 'live-demo-paseto-style-local-key')
+  .update(process.env.PASETO_DEMO_KEY || 'live-demo-paseto-local-key-32-bytes')
   .digest();
+const PASETO_LOCAL_KEY = crypto.createSecretKey(PASETO_LOCAL_RAW);
+
+// Asymmetric keys untuk JWT (Ed25519) dan PASETO (v4.public)
+const ASYMMETRIC_ED_KEYPAIR = crypto.generateKeyPairSync('ed25519');
 
 let mode = 'jwt';
 let events = [];
@@ -28,20 +38,12 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
-function base64url(value) {
-  return Buffer.from(value).toString('base64url');
-}
-
-function decodeBase64urlJson(value) {
-  return JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
-}
-
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let raw = '';
     req.on('data', (chunk) => {
       raw += chunk;
-      if (raw.length > 1024 * 1024) {
+      if (raw.length > 2 * 1024 * 1024) {
         req.destroy();
         reject(new Error('Body too large'));
       }
@@ -61,93 +63,61 @@ function readJson(req) {
   });
 }
 
+// ===== Standard JWT with jsonwebtoken =====
 function makeJwt(name) {
-  const header = { alg: 'HS256', typ: 'JWT' };
-  const payload = {
-    name,
-    role: 'USER',
-    iat: Math.floor(Date.now() / 1000)
-  };
-  const signingInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
-  const signature = crypto.createHmac('sha256', JWT_SECRET).update(signingInput).digest('base64url');
-  return `${signingInput}.${signature}`;
-}
-
-function parseJwt(token) {
-  const parts = token.split('.');
-  if (parts.length < 2) {
-    throw new Error('JWT format tidak valid');
-  }
-  return {
-    header: decodeBase64urlJson(parts[0]),
-    payload: decodeBase64urlJson(parts[1]),
-    signingInput: `${parts[0]}.${parts[1]}`,
-    signature: parts[2] || ''
-  };
+  return jwt.sign(
+    {
+      name,
+      role: 'USER',
+      iat: Math.floor(Date.now() / 1000)
+    },
+    JWT_SECRET,
+    { algorithm: 'HS256' }
+  );
 }
 
 function verifyJwtVulnerable(token) {
-  const parsed = parseJwt(token);
-  const algorithm = String(parsed.header.alg || '').toLowerCase();
+  const decoded = jwt.decode(token, { complete: true });
+  if (!decoded || typeof decoded !== 'object' || !decoded.header || !decoded.payload) {
+    throw new Error('JWT format tidak valid');
+  }
 
+  const algorithm = String(decoded.header.alg || '').toLowerCase();
   if (algorithm === 'none') {
     return {
-      claims: parsed.payload,
+      claims: decoded.payload,
       warning: 'alg:none diterima tanpa verifikasi signature'
     };
   }
 
-  if (parsed.header.alg !== 'HS256') {
-    throw new Error(`Algoritma JWT tidak didukung: ${parsed.header.alg || 'kosong'}`);
+  if (decoded.header.alg !== 'HS256') {
+    throw new Error(`Algoritma JWT tidak didukung: ${decoded.header.alg || 'kosong'}`);
   }
 
-  const expected = crypto.createHmac('sha256', JWT_SECRET).update(parsed.signingInput).digest();
-  const received = Buffer.from(parsed.signature, 'base64url');
-  if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) {
-    throw new Error('Signature JWT tidak valid');
-  }
-
+  const claims = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
   return {
-    claims: parsed.payload,
+    claims,
     warning: null
   };
 }
 
-function makeSecureLocalToken(name) {
-  const nonce = crypto.randomBytes(12);
-  const payload = Buffer.from(
-    JSON.stringify({
+// ===== Standard PASETO with panva/paseto =====
+async function makeSecureLocalToken(name) {
+  return await V3.encrypt(
+    {
       name,
       role: 'USER',
       iat: Math.floor(Date.now() / 1000)
-    }),
-    'utf8'
+    },
+    PASETO_LOCAL_KEY
   );
-  const cipher = crypto.createCipheriv('aes-256-gcm', SECURE_KEY, nonce);
-  cipher.setAAD(Buffer.from('v4.local', 'utf8'));
-  const encrypted = Buffer.concat([cipher.update(payload), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `v4.local.${Buffer.concat([nonce, encrypted, tag]).toString('base64url')}`;
 }
 
-function verifySecureLocalToken(token) {
-  if (!token.startsWith('v4.local.')) {
-    throw new Error('Token secure harus berformat v4.local');
+async function verifySecureLocalToken(token) {
+  if (!token.startsWith('v3.local.') && !token.startsWith('v4.local.')) {
+    throw new Error('Token secure harus berformat v3.local atau v4.local');
   }
-
-  const packed = Buffer.from(token.slice('v4.local.'.length), 'base64url');
-  if (packed.length <= 28) {
-    throw new Error('Token secure terlalu pendek');
-  }
-
-  const nonce = packed.subarray(0, 12);
-  const tag = packed.subarray(packed.length - 16);
-  const encrypted = packed.subarray(12, packed.length - 16);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', SECURE_KEY, nonce);
-  decipher.setAAD(Buffer.from('v4.local', 'utf8'));
-  decipher.setAuthTag(tag);
-  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-  return JSON.parse(decrypted.toString('utf8'));
+  return await V3.decrypt(token, PASETO_LOCAL_KEY);
 }
 
 function addEvent(type, payload) {
@@ -171,12 +141,15 @@ function broadcast(type, payload) {
 
 function contentType(filePath) {
   const ext = path.extname(filePath);
-  return {
-    '.html': 'text/html; charset=utf-8',
-    '.css': 'text/css; charset=utf-8',
-    '.js': 'text/javascript; charset=utf-8',
-    '.json': 'application/json; charset=utf-8'
-  }[ext] || 'application/octet-stream';
+  return (
+    {
+      '.html': 'text/html; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.js': 'text/javascript; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+      '.svg': 'image/svg+xml'
+    }[ext] || 'application/octet-stream'
+  );
 }
 
 function serveStatic(req, res) {
@@ -222,6 +195,325 @@ function extractBearer(req) {
   return match[1].trim();
 }
 
+// ===== Benchmark & Parametric Engine =====
+const PAYLOAD_PRESETS = {
+  minimal: {
+    sub: 'usr_1001',
+    role: 'USER'
+  },
+  standard: {
+    sub: 'usr_948271029',
+    name: 'Alice W. Johnson',
+    email: 'alice.johnson@example.com',
+    role: 'USER',
+    department: 'Infrastructure & SecOps',
+    permissions: ['read:profile', 'write:notes', 'access:vault'],
+    iss: 'https://auth.company.local',
+    aud: 'api.company.local'
+  },
+  rich: {
+    sub: 'usr_948271029',
+    name: 'Alice W. Johnson',
+    email: 'alice.johnson@example.com',
+    role: 'USER',
+    department: 'Infrastructure & SecOps',
+    title: 'Senior Security Architect',
+    organization_id: 'org_sec_884102',
+    permissions: [
+      'read:profile',
+      'write:notes',
+      'access:vault',
+      'audit:logs:export',
+      'infra:cluster:monitor',
+      'secrets:rotate'
+    ],
+    device: {
+      id: 'dev_macbook_m3_8912',
+      os: 'macOS Sonoma 14.5',
+      ip: '192.168.10.45',
+      trusted: true,
+      last_mfa: '2026-09-01T07:00:00Z'
+    },
+    geo: {
+      country: 'ID',
+      city: 'Jakarta',
+      tz: 'Asia/Jakarta'
+    },
+    attributes: {
+      department_code: 'DPT-ENG-SEC',
+      clearance_level: 4,
+      session_affinity: 'primary_datacenter_ap_southeast_3'
+    },
+    iss: 'https://auth.company.local',
+    aud: 'api.company.local'
+  },
+  large: {
+    sub: 'usr_948271029',
+    name: 'Alice W. Johnson',
+    email: 'alice.johnson@example.com',
+    role: 'USER',
+    department: 'Infrastructure & SecOps',
+    title: 'Senior Security Architect',
+    organization: {
+      id: 'org_enterprise_9921',
+      name: 'Global Financial Solutions Inc',
+      tier: 'ENTERPRISE_PLUS',
+      sub_entities: ['apac_branch', 'emea_hub', 'us_east_datacenter']
+    },
+    roles: ['USER', 'DEVELOPER', 'SEC_AUDITOR', 'INCIDENT_RESPONDER'],
+    permissions: Array.from({ length: 40 }, (_, idx) => `resource:module_${idx}:action_${idx % 5}`),
+    security_context: {
+      mfa_methods: ['fido2_webauthn', 'totp', 'hardware_key'],
+      risk_score: 0.02,
+      compliance_tags: ['SOC2_TYPE_II', 'ISO27001', 'PCI_DSS_3_2_1', 'GDPR_EU', 'OJK_POJK'],
+      session_policies: {
+        max_duration_seconds: 28800,
+        idle_timeout_seconds: 1800,
+        require_step_up_for: ['vault:modify', 'billing:change', 'keys:export']
+      }
+    },
+    audit_trail_preview: [
+      { action: 'login_password', status: 'OK', at: '2026-09-01T06:45:10Z' },
+      { action: 'mfa_fido2_verify', status: 'OK', at: '2026-09-01T06:45:22Z' },
+      { action: 'access_vault_token', status: 'PENDING', at: '2026-09-01T07:12:00Z' }
+    ],
+    iss: 'https://auth.company.local',
+    aud: 'api.company.local'
+  }
+};
+
+function calculateStats(latencies) {
+  if (!latencies.length) return { min: 0, max: 0, p50: 0, p95: 0, p99: 0, mean: 0 };
+  const sorted = [...latencies].sort((a, b) => a - b);
+  const min = Number(sorted[0].toFixed(2));
+  const max = Number(sorted[sorted.length - 1].toFixed(2));
+  const sum = sorted.reduce((acc, val) => acc + val, 0);
+  const mean = Number((sum / sorted.length).toFixed(2));
+  const p50 = Number(sorted[Math.floor(sorted.length * 0.5)].toFixed(2));
+  const p95 = Number(sorted[Math.floor(sorted.length * 0.95)].toFixed(2));
+  const p99 = Number(sorted[Math.floor(sorted.length * 0.99)].toFixed(2));
+  return { min, max, mean, p50, p95, p99 };
+}
+
+async function runBenchmarkEngine(options = {}) {
+  const iterations = Math.max(10, Math.min(Number(options.iterations || 1000), 5000));
+  const presetKey = options.preset && PAYLOAD_PRESETS[options.preset] ? options.preset : 'standard';
+  const custom = options.customPayload && typeof options.customPayload === 'object' ? options.customPayload : null;
+  const basePayload = custom || PAYLOAD_PRESETS[presetKey];
+  const payload = {
+    ...basePayload,
+    iat: Math.floor(Date.now() / 1000)
+  };
+
+  const rawJson = JSON.stringify(payload);
+  const rawPayloadBytes = Buffer.byteLength(rawJson);
+
+  // Warmup run
+  for (let i = 0; i < 20; i++) {
+    const tJwtHs = jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
+    jwt.verify(tJwtHs, JWT_SECRET, { algorithms: ['HS256'] });
+    const tPasLoc = await V3.encrypt(payload, PASETO_LOCAL_KEY);
+    await V3.decrypt(tPasLoc, PASETO_LOCAL_KEY);
+    const tPasPub = await V4.sign(payload, ASYMMETRIC_ED_KEYPAIR.privateKey);
+    await V4.verify(tPasPub, ASYMMETRIC_ED_KEYPAIR.publicKey);
+  }
+
+  // ===== 1. JWT HS256 (Symmetric Signing & Verification) =====
+  const jwtHsSignLatencies = [];
+  let sampleJwtHs = '';
+  const startJwtHsSign = process.hrtime.bigint();
+  for (let i = 0; i < iterations; i++) {
+    const t0 = process.hrtime.bigint();
+    sampleJwtHs = jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
+    const t1 = process.hrtime.bigint();
+    jwtHsSignLatencies.push(Number(t1 - t0) / 1000);
+  }
+  const endJwtHsSign = process.hrtime.bigint();
+  const totalJwtHsSignMs = Number(endJwtHsSign - startJwtHsSign) / 1e6;
+
+  const jwtHsVerifyLatencies = [];
+  const startJwtHsVerify = process.hrtime.bigint();
+  for (let i = 0; i < iterations; i++) {
+    const t0 = process.hrtime.bigint();
+    jwt.verify(sampleJwtHs, JWT_SECRET, { algorithms: ['HS256'] });
+    const t1 = process.hrtime.bigint();
+    jwtHsVerifyLatencies.push(Number(t1 - t0) / 1000);
+  }
+  const endJwtHsVerify = process.hrtime.bigint();
+  const totalJwtHsVerifyMs = Number(endJwtHsVerify - startJwtHsVerify) / 1e6;
+
+  const jwtHsParts = sampleJwtHs.split('.');
+  const jwtHsStats = {
+    name: 'JWT (HS256)',
+    type: 'Symmetric (HMAC-SHA256)',
+    token: sampleJwtHs,
+    charLength: sampleJwtHs.length,
+    byteSize: Buffer.byteLength(sampleJwtHs),
+    rawPayloadBytes,
+    overheadBytes: Buffer.byteLength(sampleJwtHs) - rawPayloadBytes,
+    overheadPercentage: Number((((Buffer.byteLength(sampleJwtHs) - rawPayloadBytes) / rawPayloadBytes) * 100).toFixed(1)),
+    structureBreakdown: {
+      headerBytes: Buffer.byteLength(jwtHsParts[0] || ''),
+      payloadBytes: Buffer.byteLength(jwtHsParts[1] || ''),
+      signatureBytes: Buffer.byteLength(jwtHsParts[2] || '')
+    },
+    performance: {
+      sign: {
+        opsSec: Math.round((iterations / totalJwtHsSignMs) * 1000),
+        totalTimeMs: Number(totalJwtHsSignMs.toFixed(2)),
+        stats: calculateStats(jwtHsSignLatencies)
+      },
+      verify: {
+        opsSec: Math.round((iterations / totalJwtHsVerifyMs) * 1000),
+        totalTimeMs: Number(totalJwtHsVerifyMs.toFixed(2)),
+        stats: calculateStats(jwtHsVerifyLatencies)
+      },
+      roundtrip: {
+        opsSec: Math.round((iterations / (totalJwtHsSignMs + totalJwtHsVerifyMs)) * 1000),
+        totalTimeMs: Number((totalJwtHsSignMs + totalJwtHsVerifyMs).toFixed(2)),
+        avgLatencyUs: Number(((totalJwtHsSignMs + totalJwtHsVerifyMs) * 1000 / iterations).toFixed(2))
+      }
+    }
+  };
+
+  // ===== 2. PASETO v3.local (Symmetric AEAD Encrypt & Decrypt) =====
+  const pasetoLocEncLatencies = [];
+  let samplePasetoLoc = '';
+  const startPasetoLocEnc = process.hrtime.bigint();
+  for (let i = 0; i < iterations; i++) {
+    const t0 = process.hrtime.bigint();
+    samplePasetoLoc = await V3.encrypt(payload, PASETO_LOCAL_KEY);
+    const t1 = process.hrtime.bigint();
+    pasetoLocEncLatencies.push(Number(t1 - t0) / 1000);
+  }
+  const endPasetoLocEnc = process.hrtime.bigint();
+  const totalPasetoLocEncMs = Number(endPasetoLocEnc - startPasetoLocEnc) / 1e6;
+
+  const pasetoLocDecLatencies = [];
+  const startPasetoLocDec = process.hrtime.bigint();
+  for (let i = 0; i < iterations; i++) {
+    const t0 = process.hrtime.bigint();
+    await V3.decrypt(samplePasetoLoc, PASETO_LOCAL_KEY);
+    const t1 = process.hrtime.bigint();
+    pasetoLocDecLatencies.push(Number(t1 - t0) / 1000);
+  }
+  const endPasetoLocDec = process.hrtime.bigint();
+  const totalPasetoLocDecMs = Number(endPasetoLocDec - startPasetoLocDec) / 1e6;
+
+  const pasetoLocStats = {
+    name: 'PASETO (v3.local)',
+    type: 'Symmetric AEAD (AES-256-CTR + HMAC-SHA384)',
+    token: samplePasetoLoc,
+    charLength: samplePasetoLoc.length,
+    byteSize: Buffer.byteLength(samplePasetoLoc),
+    rawPayloadBytes,
+    overheadBytes: Buffer.byteLength(samplePasetoLoc) - rawPayloadBytes,
+    overheadPercentage: Number((((Buffer.byteLength(samplePasetoLoc) - rawPayloadBytes) / rawPayloadBytes) * 100).toFixed(1)),
+    structureBreakdown: {
+      headerBytes: 9, // 'v3.local.'
+      payloadBytes: Buffer.byteLength(samplePasetoLoc) - 9 - 48, // Ciphertext & Nonce
+      signatureBytes: 48 // 384-bit Auth Tag
+    },
+    performance: {
+      encrypt: {
+        opsSec: Math.round((iterations / totalPasetoLocEncMs) * 1000),
+        totalTimeMs: Number(totalPasetoLocEncMs.toFixed(2)),
+        stats: calculateStats(pasetoLocEncLatencies)
+      },
+      decrypt: {
+        opsSec: Math.round((iterations / totalPasetoLocDecMs) * 1000),
+        totalTimeMs: Number(totalPasetoLocDecMs.toFixed(2)),
+        stats: calculateStats(pasetoLocDecLatencies)
+      },
+      roundtrip: {
+        opsSec: Math.round((iterations / (totalPasetoLocEncMs + totalPasetoLocDecMs)) * 1000),
+        totalTimeMs: Number((totalPasetoLocEncMs + totalPasetoLocDecMs).toFixed(2)),
+        avgLatencyUs: Number(((totalPasetoLocEncMs + totalPasetoLocDecMs) * 1000 / iterations).toFixed(2))
+      }
+    }
+  };
+
+  // ===== 3. PASETO v4.public (Asymmetric Ed25519 Sign & Verify) =====
+  const pasetoPubSignLatencies = [];
+  let samplePasetoPub = '';
+  const startPasetoPubSign = process.hrtime.bigint();
+  for (let i = 0; i < iterations; i++) {
+    const t0 = process.hrtime.bigint();
+    samplePasetoPub = await V4.sign(payload, ASYMMETRIC_ED_KEYPAIR.privateKey);
+    const t1 = process.hrtime.bigint();
+    pasetoPubSignLatencies.push(Number(t1 - t0) / 1000);
+  }
+  const endPasetoPubSign = process.hrtime.bigint();
+  const totalPasetoPubSignMs = Number(endPasetoPubSign - startPasetoPubSign) / 1e6;
+
+  const pasetoPubVerifyLatencies = [];
+  const startPasetoPubVerify = process.hrtime.bigint();
+  for (let i = 0; i < iterations; i++) {
+    const t0 = process.hrtime.bigint();
+    await V4.verify(samplePasetoPub, ASYMMETRIC_ED_KEYPAIR.publicKey);
+    const t1 = process.hrtime.bigint();
+    pasetoPubVerifyLatencies.push(Number(t1 - t0) / 1000);
+  }
+  const endPasetoPubVerify = process.hrtime.bigint();
+  const totalPasetoPubVerifyMs = Number(endPasetoPubVerify - startPasetoPubVerify) / 1e6;
+
+  const pasetoPubStats = {
+    name: 'PASETO (v4.public)',
+    type: 'Asymmetric (Ed25519 / EdDSA)',
+    token: samplePasetoPub,
+    charLength: samplePasetoPub.length,
+    byteSize: Buffer.byteLength(samplePasetoPub),
+    rawPayloadBytes,
+    overheadBytes: Buffer.byteLength(samplePasetoPub) - rawPayloadBytes,
+    overheadPercentage: Number((((Buffer.byteLength(samplePasetoPub) - rawPayloadBytes) / rawPayloadBytes) * 100).toFixed(1)),
+    structureBreakdown: {
+      headerBytes: 10, // 'v4.public.'
+      payloadBytes: Buffer.byteLength(samplePasetoPub) - 10 - 86, // Base64url claims
+      signatureBytes: 86 // Ed25519 signature base64url
+    },
+    performance: {
+      sign: {
+        opsSec: Math.round((iterations / totalPasetoPubSignMs) * 1000),
+        totalTimeMs: Number(totalPasetoPubSignMs.toFixed(2)),
+        stats: calculateStats(pasetoPubSignLatencies)
+      },
+      verify: {
+        opsSec: Math.round((iterations / totalPasetoPubVerifyMs) * 1000),
+        totalTimeMs: Number(totalPasetoPubVerifyMs.toFixed(2)),
+        stats: calculateStats(pasetoPubVerifyLatencies)
+      },
+      roundtrip: {
+        opsSec: Math.round((iterations / (totalPasetoPubSignMs + totalPasetoPubVerifyMs)) * 1000),
+        totalTimeMs: Number((totalPasetoPubSignMs + totalPasetoPubVerifyMs).toFixed(2)),
+        avgLatencyUs: Number(((totalPasetoPubSignMs + totalPasetoPubVerifyMs) * 1000 / iterations).toFixed(2))
+      }
+    }
+  };
+
+  return {
+    ok: true,
+    benchmarkMeta: {
+      iterations,
+      preset: presetKey,
+      rawPayloadBytes,
+      timestamp: new Date().toISOString(),
+      environment: {
+        nodeVersion: process.version,
+        arch: process.arch,
+        platform: process.platform,
+        cpus: os.cpus().length,
+        cpuModel: os.cpus()[0]?.model || 'Unknown'
+      }
+    },
+    payloadSample: payload,
+    results: {
+      jwtHs: jwtHsStats,
+      pasetoLoc: pasetoLocStats,
+      pasetoPub: pasetoPubStats
+    }
+  };
+}
+
 async function handleApi(req, res) {
   const pathname = new URL(req.url, `http://${req.headers.host}`).pathname;
 
@@ -261,7 +553,7 @@ async function handleApi(req, res) {
       sendJson(res, 400, { ok: false, error: 'Nama wajib diisi' });
       return;
     }
-    const token = mode === 'jwt' ? makeJwt(name) : makeSecureLocalToken(name);
+    const token = mode === 'jwt' ? makeJwt(name) : await makeSecureLocalToken(name);
     sendJson(res, 200, {
       ok: true,
       mode,
@@ -314,8 +606,9 @@ async function handleApi(req, res) {
       return;
     }
 
+    // PASETO-style mode
     try {
-      const claims = verifySecureLocalToken(token);
+      const claims = await verifySecureLocalToken(token);
       sendJson(res, 403, {
         ok: false,
         status: 'DENIED',
@@ -334,6 +627,24 @@ async function handleApi(req, res) {
       });
     }
     return;
+  }
+
+  // Benchmark endpoint
+  if (pathname === '/api/benchmark') {
+    if (req.method === 'POST') {
+      const body = await readJson(req);
+      const data = await runBenchmarkEngine(body);
+      sendJson(res, 200, data);
+      return;
+    }
+    if (req.method === 'GET') {
+      const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+      const iterations = Number(parsedUrl.searchParams.get('iterations') || 1000);
+      const preset = parsedUrl.searchParams.get('preset') || 'standard';
+      const data = await runBenchmarkEngine({ iterations, preset });
+      sendJson(res, 200, data);
+      return;
+    }
   }
 
   sendJson(res, 404, { ok: false, error: 'Endpoint tidak ditemukan' });
@@ -373,13 +684,15 @@ function startServer() {
     }
 
     console.log('Live Demo PASETO running');
-    console.log(`Audience : ${urls[0]}/audience.html`);
-    console.log(`Presenter: ${urls[0]}/presenter.html`);
+    console.log(`Audience  : ${urls[0]}/audience.html`);
+    console.log(`Presenter : ${urls[0]}/presenter.html`);
+    console.log(`Benchmark : ${urls[0]}/benchmark.html`);
     if (urls.length > 1) {
       console.log('LAN URLs :');
       for (const url of urls.slice(1)) {
-        console.log(`  Audience : ${url}/audience.html`);
-        console.log(`  Presenter: ${url}/presenter.html`);
+        console.log(`  Audience  : ${url}/audience.html`);
+        console.log(`  Presenter : ${url}/presenter.html`);
+        console.log(`  Benchmark : ${url}/benchmark.html`);
       }
     }
   });
@@ -394,5 +707,10 @@ if (require.main === module) {
 module.exports = {
   createServer,
   handleApi,
-  handleEvents
+  handleEvents,
+  runBenchmarkEngine,
+  makeJwt,
+  verifyJwtVulnerable,
+  makeSecureLocalToken,
+  verifySecureLocalToken
 };

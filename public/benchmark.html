@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Benchmark & Parametrik | Live Demo PASETO</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">HM</span>
+        <span>Live Demo PASETO</span>
+      </div>
+      <nav class="nav-links" aria-label="Halaman demo">
+        <a href="/audience.html">Audience</a>
+        <a href="/presenter.html">Presenter</a>
+        <a href="/benchmark.html" class="active">Benchmark</a>
+      </nav>
+    </header>
+
+    <main class="page benchmark-page">
+      <!-- Hero Banner -->
+      <section class="panel benchmark-hero">
+        <div class="hero-text-wrap">
+          <p class="eyebrow">Analisis Performa & Kriptografi</p>
+          <h1>Benchmark Parametrik JWT vs PASETO</h1>
+          <p class="lead">
+            Uji performa riil secara kuantitatif antara standar token <strong>JWT (jsonwebtoken)</strong> dan <strong>PASETO (panva/paseto)</strong>. Bandingkan kecepatan eksekusi (Ops/sec & Latensi $\mu$s), ukuran byte, overhead payload, serta karakteristik keamanan kriptografi.
+          </p>
+        </div>
+        <div class="benchmark-meta-badge" id="envBadge">
+          <span>Environment Engine</span>
+          <strong id="envNode">Node.js</strong>
+          <small id="envArch">Memuat arsitektur...</small>
+        </div>
+      </section>
+
+      <!-- Control Panel & Parameter Settings -->
+      <section class="panel benchmark-controls-panel">
+        <div class="controls-header">
+          <div>
+            <p class="eyebrow">Konfigurasi Pengujian</p>
+            <h2>Parameter Benchmark</h2>
+          </div>
+          <div class="controls-actions">
+            <button class="primary-button" id="runBtn" type="button">
+              <span id="runBtnText">🚀 Jalankan Benchmark</span>
+            </button>
+            <button class="quiet-button" id="quickBtn" type="button">⚡ Quick Test (500 ops)</button>
+          </div>
+        </div>
+
+        <div class="parameters-grid">
+          <div class="param-card">
+            <label for="iterationsSelect">Jumlah Iterasi Siklus</label>
+            <select id="iterationsSelect">
+              <option value="100">100 Siklus (Cepat)</option>
+              <option value="500">500 Siklus</option>
+              <option value="1000" selected>1.000 Siklus (Direkomendasikan)</option>
+              <option value="2500">2.500 Siklus (Akurat)</option>
+              <option value="5000">5.000 Siklus (Stress Test)</option>
+            </select>
+            <p class="param-hint">Mengukur rata-rata latensi dan distribusi persentil (p50, p95, p99).</p>
+          </div>
+
+          <div class="param-card">
+            <label for="presetSelect">Preset Ukuran Payload Data</label>
+            <select id="presetSelect">
+              <option value="minimal">Minimal (~50 Bytes, ID & Role)</option>
+              <option value="standard" selected>Standar User Session (~250 Bytes, Profil & Roles)</option>
+              <option value="rich">Rich Claims (~1 KB, Scope, Device, Geo, MFA)</option>
+              <option value="large">Enterprise Payload (~5 KB, Audit & Matrix Hak Akses)</option>
+              <option value="custom">Kustom JSON Payload</option>
+            </select>
+            <p class="param-hint" id="payloadSizeHint">Ukuran mentah JSON payload: <strong id="rawSizeLabel">-</strong></p>
+          </div>
+        </div>
+
+        <!-- Custom JSON payload collapse -->
+        <div class="custom-payload-wrap" id="customPayloadWrap" hidden>
+          <label for="customJsonInput">Payload JSON Kustom</label>
+          <textarea id="customJsonInput" spellcheck="false" placeholder='{\n  "sub": "user_123",\n  "role": "ADMIN"\n}'></textarea>
+        </div>
+
+        <div class="progress-bar-wrap" id="progressWrap" hidden>
+          <div class="progress-bar-inner" id="progressBar"></div>
+        </div>
+      </section>
+
+      <!-- KPI Metric Cards -->
+      <section class="kpi-grid" id="kpiGrid">
+        <div class="panel kpi-card">
+          <div class="kpi-label">JWT Sign Speed</div>
+          <div class="kpi-value cyan" id="kpiJwtSign">-</div>
+          <div class="kpi-sub" id="kpiJwtSignSub">Ops/Detik</div>
+        </div>
+        <div class="panel kpi-card">
+          <div class="kpi-label">PASETO Encrypt Speed</div>
+          <div class="kpi-value green" id="kpiPasetoEnc">-</div>
+          <div class="kpi-sub" id="kpiPasetoEncSub">Ops/Detik</div>
+        </div>
+        <div class="panel kpi-card">
+          <div class="kpi-label">JWT Verify Speed</div>
+          <div class="kpi-value cyan" id="kpiJwtVerify">-</div>
+          <div class="kpi-sub" id="kpiJwtVerifySub">Ops/Detik</div>
+        </div>
+        <div class="panel kpi-card">
+          <div class="kpi-label">PASETO Decrypt Speed</div>
+          <div class="kpi-value green" id="kpiPasetoDec">-</div>
+          <div class="kpi-sub" id="kpiPasetoDecSub">Ops/Detik</div>
+        </div>
+      </section>
+
+      <!-- Visual Charts: Speed & Latency -->
+      <section class="panel chart-section">
+        <div class="chart-header">
+          <div>
+            <p class="eyebrow">Grafik Metrik Kecepatan</p>
+            <h2>Perbandingan Kecepatan (Throughput & Latensi)</h2>
+          </div>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-dot jwt-dot"></span> JWT (HS256)</span>
+            <span class="legend-item"><span class="legend-dot paseto-dot"></span> PASETO (v3.local)</span>
+            <span class="legend-item"><span class="legend-dot paseto-pub-dot"></span> PASETO (v4.public)</span>
+          </div>
+        </div>
+
+        <div class="charts-container">
+          <!-- Generation / Encryption Chart -->
+          <div class="chart-card">
+            <h3>1. Kecepatan Pembuatan (Sign / Encrypt)</h3>
+            <p class="muted">Berapa banyak token yang dapat dibuat per detik (Ops/sec — Lebih tinggi lebih baik).</p>
+            <div class="bar-chart-wrap" id="chartSignOps"></div>
+          </div>
+
+          <!-- Verification / Decryption Chart -->
+          <div class="chart-card">
+            <h3>2. Kecepatan Verifikasi (Verify / Decrypt)</h3>
+            <p class="muted">Berapa banyak token yang dapat divalidasi per detik (Ops/sec — Lebih tinggi lebih baik).</p>
+            <div class="bar-chart-wrap" id="chartVerifyOps"></div>
+          </div>
+
+          <!-- Latency Distribution Chart -->
+          <div class="chart-card full-width">
+            <h3>3. Rata-rata Latensi Roundtrip & Persentil (&mu;s per Operasi)</h3>
+            <p class="muted">Waktu yang dibutuhkan untuk membuat dan memverifikasi token (Lebih rendah lebih cepat).</p>
+            <div class="latency-table-wrap">
+              <table class="benchmark-table">
+                <thead>
+                  <tr>
+                    <th>Algoritma Token</th>
+                    <th>Tipe Kripto</th>
+                    <th>Mean Latency</th>
+                    <th>p50 (Median)</th>
+                    <th>p95</th>
+                    <th>p99</th>
+                    <th>Total Roundtrip</th>
+                  </tr>
+                </thead>
+                <tbody id="latencyTableBody">
+                  <tr>
+                    <td colspan="7" class="text-center muted">Menunggu benchmark dijalankan...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Visual Charts: Size & Overhead Analysis -->
+      <section class="panel chart-section">
+        <div class="chart-header">
+          <div>
+            <p class="eyebrow">Analisis Ukuran Data</p>
+            <h2>Perbandingan Ukuran Token & Overhead Bytes</h2>
+          </div>
+        </div>
+
+        <div class="charts-container">
+          <!-- Size Comparison Bar -->
+          <div class="chart-card">
+            <h3>Ukuran Total Token (Bytes)</h3>
+            <p class="muted">Ukuran token yang dikirimkan pada header HTTP Authorization.</p>
+            <div class="bar-chart-wrap" id="chartSize"></div>
+          </div>
+
+          <!-- Overhead Ratio Bar -->
+          <div class="chart-card">
+            <h3>Overhead Kriptografi (%)</h3>
+            <p class="muted">Persentase penambahan ukuran dibanding raw JSON payload asli.</p>
+            <div class="bar-chart-wrap" id="chartOverhead"></div>
+          </div>
+
+          <!-- Structural Token Breakdown -->
+          <div class="chart-card full-width">
+            <h3>Rincian Struktur Format Token</h3>
+            <p class="muted">Komposisi byte internal antara Header, Payload / Ciphertext, dan Signature / Auth Tag.</p>
+            
+            <div class="structure-visual-list" id="structureList">
+              <div class="structure-item">
+                <div class="structure-title">
+                  <strong>JWT (HS256)</strong>
+                  <span id="jwtSizeSummary">-</span>
+                </div>
+                <div class="segmented-bar" id="jwtSegmentedBar">
+                  <div class="seg seg-header" style="width: 25%" title="Header">Header</div>
+                  <div class="seg seg-payload" style="width: 50%" title="Payload">Payload (Plain Base64Url)</div>
+                  <div class="seg seg-signature" style="width: 25%" title="Signature">Signature (HMAC)</div>
+                </div>
+              </div>
+
+              <div class="structure-item">
+                <div class="structure-title">
+                  <strong>PASETO (v3.local)</strong>
+                  <span id="pasetoLocSizeSummary">-</span>
+                </div>
+                <div class="segmented-bar" id="pasetoLocSegmentedBar">
+                  <div class="seg seg-header" style="width: 8%" title="Header Prefix (v3.local.)">v3.local.</div>
+                  <div class="seg seg-ciphertext" style="width: 67%" title="Ciphertext & Nonce">Ciphertext + Nonce (Encrypted)</div>
+                  <div class="seg seg-auth-tag" style="width: 25%" title="AEAD Tag">HMAC-SHA384 Tag</div>
+                </div>
+              </div>
+
+              <div class="structure-item">
+                <div class="structure-title">
+                  <strong>PASETO (v4.public)</strong>
+                  <span id="pasetoPubSizeSummary">-</span>
+                </div>
+                <div class="segmented-bar" id="pasetoPubSegmentedBar">
+                  <div class="seg seg-header" style="width: 8%" title="Header Prefix (v4.public.)">v4.public.</div>
+                  <div class="seg seg-payload" style="width: 60%" title="Payload Claims">Base64Url Claims</div>
+                  <div class="seg seg-signature" style="width: 32%" title="Ed25519 Signature">Ed25519 Signature</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Live Token Inspector Preview -->
+      <section class="panel token-inspector-panel">
+        <div class="inspector-header">
+          <div>
+            <p class="eyebrow">Inspeksi Nyata</p>
+            <h2>Preview Token yang Dihasilkan</h2>
+          </div>
+          <div class="token-tabs" id="tokenTabs">
+            <button class="tab-btn active" data-target="jwt">JWT HS256</button>
+            <button class="tab-btn" data-target="pasetoLoc">PASETO v3.local</button>
+            <button class="tab-btn" data-target="pasetoPub">PASETO v4.public</button>
+          </div>
+        </div>
+
+        <div class="token-preview-box">
+          <code class="token-code mono" id="tokenPreviewCode">-</code>
+        </div>
+      </section>
+
+      <!-- Comprehensive Parametric Matrix Table -->
+      <section class="panel matrix-panel">
+        <p class="eyebrow">Matriks Evaluasi Menyeluruh</p>
+        <h2>Perbandingan Fitur, Keamanan & Parameter Teknis</h2>
+        <p class="lead">
+          Mengapa memilih PASETO dibanding JWT? Berikut adalah analisis parameter arsitektural dan kriptografi antara kedua standar.
+        </p>
+
+        <div class="table-responsive">
+          <table class="matrix-table">
+            <thead>
+              <tr>
+                <th style="width: 22%;">Parameter / Karakteristik</th>
+                <th style="width: 39%;">JSON Web Token (JWT / RFC 7519)</th>
+                <th style="width: 39%;">PASETO (Platform-Agnostic Security Tokens)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Kerahasiaan Payload (Confidentiality)</strong></td>
+                <td><span class="badge badge-warning">Terbuka / Plaintext</span><br><small>Payload hanya di-encode Base64Url dan dapat dibaca siapa saja tanpa kunci secret.</small></td>
+                <td><span class="badge badge-success">Terenkripsi (Mode Local)</span><br><small>Pada mode local, payload dienkripsi dengan AEAD sehingga 100% rahasia dan tidak terbaca.</small></td>
+              </tr>
+              <tr>
+                <td><strong>Kerentanan <code>alg:none</code> & Header Spoofing</strong></td>
+                <td><span class="badge badge-danger">Rentan secara Desain</span><br><small>Header token menentukan algoritma. Bug implementasi sering membiarkan <code>alg:none</code> atau key confusion attack.</small></td>
+                <td><span class="badge badge-success">Kebal / No Algorithm Agility</span><br><small>Algoritma terkunci permanen pada versi protokol (contoh: v3/v4). Header tidak bisa diubah.</small></td>
+              </tr>
+              <tr>
+                <td><strong>Pilihan Primitif Kriptografi</strong></td>
+                <td><span class="badge badge-neutral">Terlalu Fleksibel</span><br><small>Mendukung puluhan kombinasi cipher, termasuk yang sudah usang atau lemah jika salah konfigurasi.</small></td>
+                <td><span class="badge badge-success">Modern & Terstandarisasi</span><br><small>Hanya menggunakan primitif kriptografi terkuat (AES-256, Ed25519, ChaCha20Poly1305, BLAKE2b).</small></td>
+              </tr>
+              <tr>
+                <td><strong>Ketahanan Terhadap Tampering</strong></td>
+                <td><span class="badge badge-neutral">Tergantung Algoritma & Validasi</span><br><small>Jika parsing payload dilakukan sebelum verifikasi signature, data tidak sah berpotensi bocor.</small></td>
+                <td><span class="badge badge-success">AEAD Terautentikasi Penuh</span><br><small>Perubahan 1 bit membuat seluruh proses dekripsi gagal seketika sebelum data dibaca.</small></td>
+              </tr>
+              <tr>
+                <td><strong>Kecepatan Eksekusi (Throughput)</strong></td>
+                <td><span class="badge badge-success">Sangat Cepat (Signing Saja)</span><br><small>Hanya melakukan satu kali hash HMAC sederhana tanpa enkripsi payload.</small></td>
+                <td><span class="badge badge-success">Cepat & Aman</span><br><small>Sedikit overhead tambahan karena enkripsi AEAD penuh, namun sangat optimal untuk server modern.</small></td>
+              </tr>
+              <tr>
+                <td><strong>Ukuran Token (Overhead)</strong></td>
+                <td><span class="badge badge-success">Sedikit Lebih Ringkas</span><br><small>Overhead ~100-140 bytes (Header mini + 32-byte signature HMAC-SHA256).</small></td>
+                <td><span class="badge badge-neutral">Sedikit Lebih Besar</span><br><small>Overhead ~150-190 bytes (Menyimpan Nonce dinamis + AEAD Authentication Tag 48-byte).</small></td>
+              </tr>
+              <tr>
+                <td><strong>Standarisasi Key Management</strong></td>
+                <td><span class="badge badge-danger">Sering Menggunakan Secret Lemah</span><br><small>Sering kali developer menggunakan string pendek ("secret123") yang rentan brute-force.</small></td>
+                <td><span class="badge badge-success">Enforced Key Size</span><br><small>Secara tegas mewajibkan key berukuran tepat 256-bit atau 384-bit (menolak secret lemah).</small></td>
+              </tr>
+              <tr>
+                <td><strong>Rekomendasi Penggunaan</strong></td>
+                <td>Untuk integrasi sistem lama (Legacy OAuth2/OIDC) yang membutuhkan kepatuhan RFC 7519.</td>
+                <td><strong class="green-text">Sangat Direkomendasikan</strong> untuk arsitektur modern microservices, mobile app auth, dan sesi internal aman.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="/benchmark.js"></script>
+  </body>
+</html>

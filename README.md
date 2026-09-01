@@ -1,16 +1,17 @@
 # Live Demo PASETO
 
-Live Demo PASETO adalah aplikasi demo interaktif untuk presentasi keamanan token. Demo ini memperlihatkan perbedaan antara JWT yang sengaja dibuat rentan terhadap `alg:none` dan token secure bergaya PASETO `v4.local` yang terenkripsi serta menolak perubahan satu karakter.
+Live Demo PASETO adalah aplikasi demo interaktif untuk presentasi keamanan token dan analisis performa. Demo ini menggunakan library standar resmi (**jsonwebtoken** dan **paseto**), memperlihatkan perbedaan antara JWT yang sengaja dibuat rentan terhadap `alg:none` dan token secure PASETO `v3.local` yang terenkripsi AEAD serta menolak manipulasi 1 bit pun. Aplikasi ini juga dilengkapi halaman benchmark parametrik untuk membandingkan kecepatan (ops/sec & latensi) serta ukuran token.
 
 ![Live Demo PASETO overview](docs/images/app-overview.svg)
 
 ## Isi Demo
 
 - Halaman audience untuk peserta mengisi nama, mengambil token, dan mencoba akses brankas.
-- Halaman presenter dengan kontrol eksklusif untuk memindahkan mode keamanan.
-- Mode `JWT Vulnerable` yang sengaja menerima token palsu `alg:none`.
-- Mode `PASETO Secure` yang memakai token `v4.local` terenkripsi dengan AEAD `AES-256-GCM`.
-- Sinkronisasi real-time memakai Server-Sent Events, jadi audience otomatis mengikuti mode presenter dan presenter langsung mendapat notifikasi saat ada percobaan berhasil atau diblokir.
+- Halaman presenter dengan kontrol eksklusif untuk memindahkan mode keamanan secara real-time.
+- Halaman benchmark interaktif (`/benchmark.html`) untuk menguji kecepatan (ops/detik, latensi $\mu$s) dan ukuran token (byte, overhead, breakdown) secara live.
+- Mode `JWT Vulnerable` menggunakan library standar `jsonwebtoken` yang sengaja menerima token palsu `alg:none`.
+- Mode `PASETO Secure` menggunakan library resmi `paseto` dengan token `v3.local` terenkripsi AEAD (`AES-256-CTR` + `HMAC-SHA384`).
+- Sinkronisasi real-time memakai Server-Sent Events (SSE).
 
 ## Prasyarat
 
@@ -18,9 +19,7 @@ Pastikan sudah ada:
 
 - Node.js versi 20 atau lebih baru.
 - Browser modern seperti Chrome, Edge, Safari, atau Firefox.
-- Koneksi Wi-Fi yang sama jika ingin peserta membuka demo dari HP.
-
-Tidak perlu `npm install`, karena demo ini hanya memakai modul bawaan Node.js.
+- Jalankan `npm install` untuk menginstal dependensi resmi (`jsonwebtoken` dan `paseto`).
 
 ## Cara Instalasi
 
@@ -29,6 +28,7 @@ Clone repository:
 ```bash
 git clone https://github.com/Andreean26/demo_paseto.git
 cd demo_paseto
+npm install
 ```
 
 Jalankan server:
@@ -41,11 +41,13 @@ Jika berhasil, terminal akan menampilkan URL seperti ini:
 
 ```text
 Live Demo PASETO running
-Audience : http://localhost:8080/audience.html
-Presenter: http://localhost:8080/presenter.html
+Audience  : http://localhost:8080/audience.html
+Presenter : http://localhost:8080/presenter.html
+Benchmark : http://localhost:8080/benchmark.html
 LAN URLs :
-  Audience : http://192.168.x.x:8080/audience.html
-  Presenter: http://192.168.x.x:8080/presenter.html
+  Audience  : http://192.168.x.x:8080/audience.html
+  Presenter : http://192.168.x.x:8080/presenter.html
+  Benchmark : http://192.168.x.x:8080/benchmark.html
 ```
 
 ## Buka Halaman Demo
@@ -154,6 +156,7 @@ demo_paseto/
 | `POST` | `/api/reset` | Menghapus event presenter. |
 | `POST` | `/api/auth/generate` | Membuat token role `USER`. |
 | `POST` | `/api/vault/access` | Menguji akses brankas memakai token di header `Authorization`. |
+| `GET` / `POST` | `/api/benchmark` | Menjalankan benchmark kecepatan dan ukuran token parametrik. |
 | `GET` | `/events` | Stream mode dan event real-time untuk presenter serta audience. |
 
 ## Konfigurasi Opsional
