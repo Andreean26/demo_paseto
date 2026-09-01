@@ -30,13 +30,16 @@ const chartSize = document.querySelector('#chartSize');
 const chartOverhead = document.querySelector('#chartOverhead');
 const latencyTableBody = document.querySelector('#latencyTableBody');
 
-// Segmented bar elements
+// Segmented bar elements & legend grids
 const jwtSizeSummary = document.querySelector('#jwtSizeSummary');
 const pasetoLocSizeSummary = document.querySelector('#pasetoLocSizeSummary');
 const pasetoPubSizeSummary = document.querySelector('#pasetoPubSizeSummary');
 const jwtSegmentedBar = document.querySelector('#jwtSegmentedBar');
 const pasetoLocSegmentedBar = document.querySelector('#pasetoLocSegmentedBar');
 const pasetoPubSegmentedBar = document.querySelector('#pasetoPubSegmentedBar');
+const jwtLegendGrid = document.querySelector('#jwtLegendGrid');
+const pasetoLocLegendGrid = document.querySelector('#pasetoLocLegendGrid');
+const pasetoPubLegendGrid = document.querySelector('#pasetoPubLegendGrid');
 
 // Token inspector preview
 const tokenTabs = document.querySelector('#tokenTabs');
@@ -204,43 +207,133 @@ function updateCharts(results) {
 function updateStructureBreakdown(results) {
   const { jwtHs, pasetoLoc, pasetoPub } = results;
 
-  // JWT structure
+  // 1. JWT (HS256) -> Purple (Header) | Cyan (Payload) | Amber (Signature)
   const jwtH = jwtHs.structureBreakdown.headerBytes;
   const jwtP = jwtHs.structureBreakdown.payloadBytes;
   const jwtS = jwtHs.structureBreakdown.signatureBytes;
   const jwtTotal = jwtH + jwtP + jwtS || 1;
+  const jwtHpct = ((jwtH / jwtTotal) * 100).toFixed(1);
+  const jwtPpct = ((jwtP / jwtTotal) * 100).toFixed(1);
+  const jwtSpct = ((jwtS / jwtTotal) * 100).toFixed(1);
 
   jwtSizeSummary.textContent = `${jwtHs.byteSize} Bytes total (${jwtHs.charLength} karakter)`;
   jwtSegmentedBar.innerHTML = `
-    <div class="seg seg-header" style="width: ${(jwtH / jwtTotal) * 100}%" title="Header: ${jwtH} bytes">Header (${jwtH}B)</div>
-    <div class="seg seg-payload" style="width: ${(jwtP / jwtTotal) * 100}%" title="Payload: ${jwtP} bytes">Payload Base64Url (${jwtP}B)</div>
-    <div class="seg seg-signature" style="width: ${(jwtS / jwtTotal) * 100}%" title="Signature: ${jwtS} bytes">Signature HMAC (${jwtS}B)</div>
+    <div class="seg seg-header" style="width: ${jwtHpct}%" title="Header: ${jwtH}B (${jwtHpct}%)"></div>
+    <div class="seg seg-payload" style="width: ${jwtPpct}%" title="Payload: ${jwtP}B (${jwtPpct}%)"></div>
+    <div class="seg seg-signature" style="width: ${jwtSpct}%" title="Signature: ${jwtS}B (${jwtSpct}%)"></div>
   `;
 
-  // PASETO Local structure
+  jwtLegendGrid.innerHTML = `
+    <div class="legend-card">
+      <div class="legend-card-top">
+        <span class="legend-dot header-dot"></span>
+        <span class="legend-card-title">Header</span>
+        <span class="legend-card-size purple-text">${jwtH} Bytes (${jwtHpct}%)</span>
+      </div>
+      <div class="legend-card-detail"><code>{"alg":"HS256","typ":"JWT"}</code> Base64Url</div>
+    </div>
+    <div class="legend-card">
+      <div class="legend-card-top">
+        <span class="legend-dot payload-dot"></span>
+        <span class="legend-card-title">Payload (Claims)</span>
+        <span class="legend-card-size cyan-text">${jwtP} Bytes (${jwtPpct}%)</span>
+      </div>
+      <div class="legend-card-detail">JSON Claims Base64Url (Terbuka / Plaintext)</div>
+    </div>
+    <div class="legend-card">
+      <div class="legend-card-top">
+        <span class="legend-dot signature-dot"></span>
+        <span class="legend-card-title">Signature HMAC</span>
+        <span class="legend-card-size yellow-text">${jwtS} Bytes (${jwtSpct}%)</span>
+      </div>
+      <div class="legend-card-detail">32-Byte Binary HMAC-SHA256 Base64Url</div>
+    </div>
+  `;
+
+  // 2. PASETO (v3.local) -> Purple (Header Prefix) | Green (Ciphertext) | Amber (AEAD Tag)
   const locH = pasetoLoc.structureBreakdown.headerBytes;
   const locP = Math.max(1, pasetoLoc.structureBreakdown.payloadBytes);
   const locS = pasetoLoc.structureBreakdown.signatureBytes;
   const locTotal = locH + locP + locS || 1;
+  const locHpct = ((locH / locTotal) * 100).toFixed(1);
+  const locPpct = ((locP / locTotal) * 100).toFixed(1);
+  const locSpct = ((locS / locTotal) * 100).toFixed(1);
 
   pasetoLocSizeSummary.textContent = `${pasetoLoc.byteSize} Bytes total (${pasetoLoc.charLength} karakter)`;
   pasetoLocSegmentedBar.innerHTML = `
-    <div class="seg seg-header" style="width: ${(locH / locTotal) * 100}%" title="Prefix: ${locH} bytes">v3.local. (${locH}B)</div>
-    <div class="seg seg-ciphertext" style="width: ${(locP / locTotal) * 100}%" title="Ciphertext & Nonce: ${locP} bytes">Ciphertext + Nonce (${locP}B)</div>
-    <div class="seg seg-auth-tag" style="width: ${(locS / locTotal) * 100}%" title="HMAC-SHA384 Auth Tag: ${locS} bytes">AEAD Tag (${locS}B)</div>
+    <div class="seg seg-header" style="width: ${locHpct}%" title="Prefix: ${locH}B (${locHpct}%)"></div>
+    <div class="seg seg-ciphertext" style="width: ${locPpct}%" title="Ciphertext & Nonce: ${locP}B (${locPpct}%)"></div>
+    <div class="seg seg-auth-tag" style="width: ${locSpct}%" title="AEAD Tag: ${locS}B (${locSpct}%)"></div>
   `;
 
-  // PASETO Public structure
+  pasetoLocLegendGrid.innerHTML = `
+    <div class="legend-card">
+      <div class="legend-card-top">
+        <span class="legend-dot header-dot"></span>
+        <span class="legend-card-title">Header Prefix</span>
+        <span class="legend-card-size purple-text">${locH} Bytes (${locHpct}%)</span>
+      </div>
+      <div class="legend-card-detail">Header protokol <code>v3.local.</code> konstan</div>
+    </div>
+    <div class="legend-card">
+      <div class="legend-card-top">
+        <span class="legend-dot ciphertext-dot"></span>
+        <span class="legend-card-title">Ciphertext & Nonce</span>
+        <span class="legend-card-size green-text">${locP} Bytes (${locPpct}%)</span>
+      </div>
+      <div class="legend-card-detail">AES-256-CTR Terenkripsi + 32-Byte Nonce Dinamis</div>
+    </div>
+    <div class="legend-card">
+      <div class="legend-card-top">
+        <span class="legend-dot auth-tag-dot"></span>
+        <span class="legend-card-title">AEAD Auth Tag</span>
+        <span class="legend-card-size yellow-text">${locS} Bytes (${locSpct}%)</span>
+      </div>
+      <div class="legend-card-detail">48-Byte HMAC-SHA384 Authentication Tag</div>
+    </div>
+  `;
+
+  // 3. PASETO (v4.public) -> Purple (Header Prefix) | Cyan (Claims) | Amber (Ed25519 Signature)
   const pubH = pasetoPub.structureBreakdown.headerBytes;
   const pubP = Math.max(1, pasetoPub.structureBreakdown.payloadBytes);
   const pubS = pasetoPub.structureBreakdown.signatureBytes;
   const pubTotal = pubH + pubP + pubS || 1;
+  const pubHpct = ((pubH / pubTotal) * 100).toFixed(1);
+  const pubPpct = ((pubP / pubTotal) * 100).toFixed(1);
+  const pubSpct = ((pubS / pubTotal) * 100).toFixed(1);
 
   pasetoPubSizeSummary.textContent = `${pasetoPub.byteSize} Bytes total (${pasetoPub.charLength} karakter)`;
   pasetoPubSegmentedBar.innerHTML = `
-    <div class="seg seg-header" style="width: ${(pubH / pubTotal) * 100}%" title="Prefix: ${pubH} bytes">v4.public. (${pubH}B)</div>
-    <div class="seg seg-payload" style="width: ${(pubP / pubTotal) * 100}%" title="Base64 Claims: ${pubP} bytes">Claims (${pubP}B)</div>
-    <div class="seg seg-signature" style="width: ${(pubS / pubTotal) * 100}%" title="Ed25519 Signature: ${pubS} bytes">Ed25519 Sig (${pubS}B)</div>
+    <div class="seg seg-header" style="width: ${pubHpct}%" title="Prefix: ${pubH}B (${pubHpct}%)"></div>
+    <div class="seg seg-payload" style="width: ${pubPpct}%" title="Payload Claims: ${pubP}B (${pubPpct}%)"></div>
+    <div class="seg seg-signature" style="width: ${pubSpct}%" title="Ed25519 Sig: ${pubS}B (${pubSpct}%)"></div>
+  `;
+
+  pasetoPubLegendGrid.innerHTML = `
+    <div class="legend-card">
+      <div class="legend-card-top">
+        <span class="legend-dot header-dot"></span>
+        <span class="legend-card-title">Header Prefix</span>
+        <span class="legend-card-size purple-text">${pubH} Bytes (${pubHpct}%)</span>
+      </div>
+      <div class="legend-card-detail">Header protokol <code>v4.public.</code> konstan</div>
+    </div>
+    <div class="legend-card">
+      <div class="legend-card-top">
+        <span class="legend-dot payload-dot"></span>
+        <span class="legend-card-title">Payload Claims</span>
+        <span class="legend-card-size cyan-text">${pubP} Bytes (${pubPpct}%)</span>
+      </div>
+      <div class="legend-card-detail">JSON Claims Base64Url (Asymmetric Payload)</div>
+    </div>
+    <div class="legend-card">
+      <div class="legend-card-top">
+        <span class="legend-dot signature-dot"></span>
+        <span class="legend-card-title">Ed25519 Signature</span>
+        <span class="legend-card-size yellow-text">${pubS} Bytes (${pubSpct}%)</span>
+      </div>
+      <div class="legend-card-detail">64-Byte EdDSA Binary Signature Base64Url</div>
+    </div>
   `;
 }
 
@@ -274,7 +367,7 @@ async function runBenchmark(customIterations = null) {
   // UI state: loading
   runBtn.disabled = true;
   quickBtn.disabled = true;
-  runBtnText.textContent = '⏳ Menguji performa...';
+  runBtnText.textContent = 'Menguji performa...';
   progressWrap.hidden = false;
   progressBar.style.width = '30%';
 
@@ -317,7 +410,7 @@ async function runBenchmark(customIterations = null) {
     }, 400);
     runBtn.disabled = false;
     quickBtn.disabled = false;
-    runBtnText.textContent = '🚀 Jalankan Benchmark';
+    runBtnText.textContent = 'Jalankan Benchmark';
   }
 }
 

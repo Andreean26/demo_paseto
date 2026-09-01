@@ -45,9 +45,9 @@
           </div>
           <div class="controls-actions">
             <button class="primary-button" id="runBtn" type="button">
-              <span id="runBtnText">🚀 Jalankan Benchmark</span>
+              <span id="runBtnText">Jalankan Benchmark</span>
             </button>
-            <button class="quiet-button" id="quickBtn" type="button">⚡ Quick Test (500 ops)</button>
+            <button class="quiet-button" id="quickBtn" type="button">Quick Test (500 ops)</button>
           </div>
         </div>
 
@@ -195,44 +195,44 @@
 
           <!-- Structural Token Breakdown -->
           <div class="chart-card full-width">
-            <h3>Rincian Struktur Format Token</h3>
-            <p class="muted">Komposisi byte internal antara Header, Payload / Ciphertext, dan Signature / Auth Tag.</p>
-            
             <div class="structure-visual-list" id="structureList">
-              <div class="structure-item">
-                <div class="structure-title">
-                  <strong>JWT (HS256)</strong>
-                  <span id="jwtSizeSummary">-</span>
+              <!-- JWT HS256 -->
+              <div class="structure-card">
+                <div class="structure-header">
+                  <div class="structure-title-group">
+                    <strong>JWT (HS256)</strong>
+                    <span class="badge badge-warning">Plaintext / Signed</span>
+                  </div>
+                  <span class="structure-size-badge" id="jwtSizeSummary">-</span>
                 </div>
-                <div class="segmented-bar" id="jwtSegmentedBar">
-                  <div class="seg seg-header" style="width: 25%" title="Header">Header</div>
-                  <div class="seg seg-payload" style="width: 50%" title="Payload">Payload (Plain Base64Url)</div>
-                  <div class="seg seg-signature" style="width: 25%" title="Signature">Signature (HMAC)</div>
-                </div>
+                <div class="segmented-bar" id="jwtSegmentedBar"></div>
+                <div class="segment-legend-grid" id="jwtLegendGrid"></div>
               </div>
 
-              <div class="structure-item">
-                <div class="structure-title">
-                  <strong>PASETO (v3.local)</strong>
-                  <span id="pasetoLocSizeSummary">-</span>
+              <!-- PASETO v3.local -->
+              <div class="structure-card">
+                <div class="structure-header">
+                  <div class="structure-title-group">
+                    <strong>PASETO (v3.local)</strong>
+                    <span class="badge badge-success">Encrypted AEAD</span>
+                  </div>
+                  <span class="structure-size-badge" id="pasetoLocSizeSummary">-</span>
                 </div>
-                <div class="segmented-bar" id="pasetoLocSegmentedBar">
-                  <div class="seg seg-header" style="width: 8%" title="Header Prefix (v3.local.)">v3.local.</div>
-                  <div class="seg seg-ciphertext" style="width: 67%" title="Ciphertext & Nonce">Ciphertext + Nonce (Encrypted)</div>
-                  <div class="seg seg-auth-tag" style="width: 25%" title="AEAD Tag">HMAC-SHA384 Tag</div>
-                </div>
+                <div class="segmented-bar" id="pasetoLocSegmentedBar"></div>
+                <div class="segment-legend-grid" id="pasetoLocLegendGrid"></div>
               </div>
 
-              <div class="structure-item">
-                <div class="structure-title">
-                  <strong>PASETO (v4.public)</strong>
-                  <span id="pasetoPubSizeSummary">-</span>
+              <!-- PASETO v4.public -->
+              <div class="structure-card">
+                <div class="structure-header">
+                  <div class="structure-title-group">
+                    <strong>PASETO (v4.public)</strong>
+                    <span class="badge badge-warning">Asymmetric Signed</span>
+                  </div>
+                  <span class="structure-size-badge" id="pasetoPubSizeSummary">-</span>
                 </div>
-                <div class="segmented-bar" id="pasetoPubSegmentedBar">
-                  <div class="seg seg-header" style="width: 8%" title="Header Prefix (v4.public.)">v4.public.</div>
-                  <div class="seg seg-payload" style="width: 60%" title="Payload Claims">Base64Url Claims</div>
-                  <div class="seg seg-signature" style="width: 32%" title="Ed25519 Signature">Ed25519 Signature</div>
-                </div>
+                <div class="segmented-bar" id="pasetoPubSegmentedBar"></div>
+                <div class="segment-legend-grid" id="pasetoPubLegendGrid"></div>
               </div>
             </div>
           </div>
