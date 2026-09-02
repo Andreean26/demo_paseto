@@ -99,26 +99,38 @@ function renderBarChart(container, items, { unit = '', higherIsBetter = true } =
   }
 }
 
+// ============================================================================
+// SECTION 1: KPI CARDS (Ringkasan Kecepatan Signing & Verifikasi Teratas)
+// ============================================================================
 function updateKpiCards(results) {
   const { jwtHs, pasetoLoc } = results;
 
+  // 1. Throughput Signing JWT & Rata-rata Latensi (µs)
   kpiJwtSign.textContent = formatNumber(jwtHs.performance.sign.opsSec);
   kpiJwtSignSub.textContent = `Ops/detik (${formatLatency(jwtHs.performance.sign.stats.mean)})`;
 
+  // 2. Throughput Enkripsi PASETO v4.local & Rata-rata Latensi (µs)
   kpiPasetoEnc.textContent = formatNumber(pasetoLoc.performance.encrypt.opsSec);
   kpiPasetoEncSub.textContent = `Ops/detik (${formatLatency(pasetoLoc.performance.encrypt.stats.mean)})`;
 
+  // 3. Throughput Verifikasi Signature JWT
   kpiJwtVerify.textContent = formatNumber(jwtHs.performance.verify.opsSec);
   kpiJwtVerifySub.textContent = `Ops/detik (${formatLatency(jwtHs.performance.verify.stats.mean)})`;
 
+  // 4. Throughput Dekripsi & Autentikasi PASETO v4.local
   kpiPasetoDec.textContent = formatNumber(pasetoLoc.performance.decrypt.opsSec);
   kpiPasetoDecSub.textContent = `Ops/detik (${formatLatency(pasetoLoc.performance.decrypt.stats.mean)})`;
 }
 
+// ============================================================================
+// SECTION 2: GRAFIK BATANG & TABEL PERSENTIL LATENSI
+// ============================================================================
 function updateCharts(results) {
   const { jwtHs, pasetoLoc, pasetoPub } = results;
 
-  // 1. Sign / Encrypt Ops/sec
+  // --------------------------------------------------------------------------
+  // 1. Grafik Kecepatan Pembuatan (Sign / Encrypt) -> Ops/sec (Higher is Better)
+  // --------------------------------------------------------------------------
   renderBarChart(
     chartSignOps,
     [
@@ -129,7 +141,9 @@ function updateCharts(results) {
     { unit: 'ops/sec' }
   );
 
-  // 2. Verify / Decrypt Ops/sec
+  // --------------------------------------------------------------------------
+  // 2. Grafik Kecepatan Verifikasi (Verify / Decrypt) -> Ops/sec (Higher is Better)
+  // --------------------------------------------------------------------------
   renderBarChart(
     chartVerifyOps,
     [
@@ -140,7 +154,9 @@ function updateCharts(results) {
     { unit: 'ops/sec' }
   );
 
-  // 3. Token Size (Bytes)
+  // --------------------------------------------------------------------------
+  // 3. Grafik Ukuran Total Token (Bytes) -> Dibandingkan Raw JSON Asli
+  // --------------------------------------------------------------------------
   renderBarChart(
     chartSize,
     [
@@ -152,7 +168,9 @@ function updateCharts(results) {
     { unit: 'bytes' }
   );
 
-  // 4. Overhead Ratio (%)
+  // --------------------------------------------------------------------------
+  // 4. Grafik Rasio Overhead Kriptografi (%) -> ((TokenBytes - RawBytes)/RawBytes)*100
+  // --------------------------------------------------------------------------
   renderBarChart(
     chartOverhead,
     [
@@ -163,7 +181,9 @@ function updateCharts(results) {
     { unit: '%' }
   );
 
-  // 5. Latency Percentiles Table
+  // --------------------------------------------------------------------------
+  // 5. Tabel Distribusi Latensi Persentil (Mean, p50, p95, p99 & Roundtrip)
+  // --------------------------------------------------------------------------
   latencyTableBody.innerHTML = '';
   const rows = [
     {
@@ -200,14 +220,21 @@ function updateCharts(results) {
     latencyTableBody.append(tr);
   }
 
-  // 6. Segmented Bars for Token Structure
+  // --------------------------------------------------------------------------
+  // 6. Visualisasi Segmented Bar Breakdown (Komponen Header, Payload & Tag)
+  // --------------------------------------------------------------------------
   updateStructureBreakdown(results);
 }
 
+// ============================================================================
+// SECTION 3: STRUKTUR TOKEN SEGMENTED BREAKDOWN (Alokasi Byte per Komponen)
+// ============================================================================
 function updateStructureBreakdown(results) {
   const { jwtHs, pasetoLoc, pasetoPub } = results;
 
-  // 1. JWT (HS256) -> Purple (Header) | Cyan (Payload) | Amber (Signature)
+  // --------------------------------------------------------------------------
+  // A. Breakdown JWT (HS256): Header (Base64) + Payload (Base64) + Signature
+  // --------------------------------------------------------------------------
   const jwtH = jwtHs.structureBreakdown.headerBytes;
   const jwtP = jwtHs.structureBreakdown.payloadBytes;
   const jwtS = jwtHs.structureBreakdown.signatureBytes;
@@ -250,7 +277,9 @@ function updateStructureBreakdown(results) {
     </div>
   `;
 
-  // 2. PASETO (v4.local) -> Purple (Header Prefix) | Green (Ciphertext & Nonce) | Amber (BLAKE2b Tag)
+  // --------------------------------------------------------------------------
+  // B. Breakdown PASETO (v4.local): Prefix (9B) + Ciphertext & Nonce + BLAKE2b (32B)
+  // --------------------------------------------------------------------------
   const locH = pasetoLoc.structureBreakdown.headerBytes;
   const locP = Math.max(1, pasetoLoc.structureBreakdown.payloadBytes);
   const locS = pasetoLoc.structureBreakdown.signatureBytes;
@@ -293,7 +322,9 @@ function updateStructureBreakdown(results) {
     </div>
   `;
 
-  // 3. PASETO (v4.public) -> Purple (Header Prefix) | Cyan (Claims) | Amber (Ed25519 Signature)
+  // --------------------------------------------------------------------------
+  // C. Breakdown PASETO (v4.public): Prefix (10B) + Claims (Base64) + Ed25519 (86B)
+  // --------------------------------------------------------------------------
   const pubH = pasetoPub.structureBreakdown.headerBytes;
   const pubP = Math.max(1, pasetoPub.structureBreakdown.payloadBytes);
   const pubS = pasetoPub.structureBreakdown.signatureBytes;
@@ -337,6 +368,9 @@ function updateStructureBreakdown(results) {
   `;
 }
 
+// ============================================================================
+// SECTION 4: LIVE TOKEN INSPECTOR PREVIEW
+// ============================================================================
 function updateTokenInspector() {
   if (!lastBenchmarkData || !lastBenchmarkData.results) return;
   const { results } = lastBenchmarkData;
@@ -350,6 +384,9 @@ function updateTokenInspector() {
   }
 }
 
+// ============================================================================
+// SECTION 5: TRIGGER PENGUJIAN BENCHMARK (Request HTTP ke Server API)
+// ============================================================================
 async function runBenchmark(customIterations = null) {
   const iterations = customIterations || Number(iterationsSelect.value || 1000);
   const preset = presetSelect.value;
@@ -364,7 +401,7 @@ async function runBenchmark(customIterations = null) {
     }
   }
 
-  // UI state: loading
+  // 1. Update status UI ke state 'loading'
   runBtn.disabled = true;
   quickBtn.disabled = true;
   runBtnText.textContent = 'Menguji performa...';
@@ -372,6 +409,7 @@ async function runBenchmark(customIterations = null) {
   progressBar.style.width = '30%';
 
   try {
+    // 2. Kirim request ke backend untuk menjalankan benchmark kriptografi riil
     const response = await fetch('/api/benchmark', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -388,7 +426,7 @@ async function runBenchmark(customIterations = null) {
 
     lastBenchmarkData = data;
 
-    // Update metadata
+    // 3. Tampilkan metadata lingkungan server (Versi Node, CPU, Cores)
     if (data.benchmarkMeta) {
       rawSizeLabel.textContent = `${data.benchmarkMeta.rawPayloadBytes} Bytes`;
       if (data.benchmarkMeta.environment) {
@@ -398,12 +436,14 @@ async function runBenchmark(customIterations = null) {
       }
     }
 
+    // 4. Render seluruh data hasil ke UI (KPI Cards, Bar Charts, Token Preview)
     updateKpiCards(data.results);
     updateCharts(data.results);
     updateTokenInspector();
   } catch (error) {
     alert(`Gagal menjalankan benchmark: ${error.message}`);
   } finally {
+    // 5. Reset status tombol dan progress bar
     setTimeout(() => {
       progressWrap.hidden = true;
       progressBar.style.width = '0%';

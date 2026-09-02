@@ -373,20 +373,37 @@ const PAYLOAD_PRESETS = {
   }
 };
 
+// ============================================================================
+// SECTION STATISTIK: Perhitungan Distribusi Latensi (Min, Max, Mean, p50, p95, p99)
+// ============================================================================
 function calculateStats(latencies) {
   if (!latencies.length) return { min: 0, max: 0, p50: 0, p95: 0, p99: 0, mean: 0 };
+  
+  // 1. Urutkan data latensi secara ascending (terkecil ke terbesar)
   const sorted = [...latencies].sort((a, b) => a - b);
   const min = Number(sorted[0].toFixed(2));
   const max = Number(sorted[sorted.length - 1].toFixed(2));
+  
+  // 2. Hitung Mean (Rata-rata) = Total Durasi / Jumlah Sampel
   const sum = sorted.reduce((acc, val) => acc + val, 0);
   const mean = Number((sum / sorted.length).toFixed(2));
+  
+  // 3. Hitung Persentil:
+  // - p50 (Median): Titik tengah (50% request berada di bawah nilai ini)
+  // - p95: Batas 95% request (5% request paling lambat di atas nilai ini)
+  // - p99: Mengukur lonjakan latensi ekstrim / tail latency (1% request paling lambat)
   const p50 = Number(sorted[Math.floor(sorted.length * 0.5)].toFixed(2));
   const p95 = Number(sorted[Math.floor(sorted.length * 0.95)].toFixed(2));
   const p99 = Number(sorted[Math.floor(sorted.length * 0.99)].toFixed(2));
+  
   return { min, max, mean, p50, p95, p99 };
 }
 
+// ============================================================================
+// SECTION BENCHMARK ENGINE: Pengujian Kriptografi Riil Berbasis Hardware Timer
+// ============================================================================
 async function runBenchmarkEngine(options = {}) {
+  // Batasi iterasi antara 10 hingga 5.000 untuk stabilitas CPU
   const iterations = Math.max(10, Math.min(Number(options.iterations || 1000), 5000));
   const presetKey = options.preset && PAYLOAD_PRESETS[options.preset] ? options.preset : 'standard';
   const custom = options.customPayload && typeof options.customPayload === 'object' ? options.customPayload : null;
@@ -396,10 +413,14 @@ async function runBenchmarkEngine(options = {}) {
     iat: Math.floor(Date.now() / 1000)
   };
 
+  // Hitung ukuran raw payload JSON asli sebagai basis perbandingan overhead
   const rawJson = JSON.stringify(payload);
   const rawPayloadBytes = Buffer.byteLength(rawJson);
 
-  // Warmup run
+  // --------------------------------------------------------------------------
+  // TAHAP 1: Warmup Run (Pemanasan V8 JIT Compiler)
+  // Menghindari distorsi cold-start agar fungsi masuk ke CPU Hot Path
+  // --------------------------------------------------------------------------
   for (let i = 0; i < 20; i++) {
     const tJwtHs = jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
     jwt.verify(tJwtHs, JWT_SECRET, { algorithms: ['HS256'] });
@@ -409,19 +430,24 @@ async function runBenchmarkEngine(options = {}) {
     await V4.verify(tPasPub, ASYMMETRIC_ED_KEYPAIR.publicKey);
   }
 
-  // ===== 1. JWT HS256 (Symmetric Signing & Verification) =====
+  // --------------------------------------------------------------------------
+  // TAHAP 2: Pengujian JWT HS256 (Symmetric HMAC-SHA256)
+  // --------------------------------------------------------------------------
+  // A. Pengukuran Waktu Signing JWT
   const jwtHsSignLatencies = [];
   let sampleJwtHs = '';
-  const startJwtHsSign = process.hrtime.bigint();
+  const startJwtHsSign = process.hrtime.bigint(); // Timer presisi nanodetik
   for (let i = 0; i < iterations; i++) {
     const t0 = process.hrtime.bigint();
     sampleJwtHs = jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
     const t1 = process.hrtime.bigint();
+    // Konversi selisih nanodetik (ns) ke mikrodetik (µs)
     jwtHsSignLatencies.push(Number(t1 - t0) / 1000);
   }
   const endJwtHsSign = process.hrtime.bigint();
   const totalJwtHsSignMs = Number(endJwtHsSign - startJwtHsSign) / 1e6;
 
+  // B. Pengukuran Waktu Verifikasi JWT
   const jwtHsVerifyLatencies = [];
   const startJwtHsVerify = process.hrtime.bigint();
   for (let i = 0; i < iterations; i++) {
@@ -433,6 +459,7 @@ async function runBenchmarkEngine(options = {}) {
   const endJwtHsVerify = process.hrtime.bigint();
   const totalJwtHsVerifyMs = Number(endJwtHsVerify - startJwtHsVerify) / 1e6;
 
+  // C. Kalkulasi Throughput (Ops/sec), Ukuran & Overhead JWT
   const jwtHsParts = sampleJwtHs.split('.');
   const jwtHsStats = {
     name: 'JWT (HS256)',
@@ -441,7 +468,9 @@ async function runBenchmarkEngine(options = {}) {
     charLength: sampleJwtHs.length,
     byteSize: Buffer.byteLength(sampleJwtHs),
     rawPayloadBytes,
+    // Overhead = Ukuran Token - Ukuran JSON Asli
     overheadBytes: Buffer.byteLength(sampleJwtHs) - rawPayloadBytes,
+    // Persentase Overhead = ((TokenBytes - RawBytes) / RawBytes) * 100%
     overheadPercentage: Number((((Buffer.byteLength(sampleJwtHs) - rawPayloadBytes) / rawPayloadBytes) * 100).toFixed(1)),
     structureBreakdown: {
       headerBytes: Buffer.byteLength(jwtHsParts[0] || ''),
@@ -450,6 +479,7 @@ async function runBenchmarkEngine(options = {}) {
     },
     performance: {
       sign: {
+        // Throughput = (Iterasi / Total Durasi ms) * 1000 = Ops per Detik
         opsSec: Math.round((iterations / totalJwtHsSignMs) * 1000),
         totalTimeMs: Number(totalJwtHsSignMs.toFixed(2)),
         stats: calculateStats(jwtHsSignLatencies)
@@ -462,12 +492,16 @@ async function runBenchmarkEngine(options = {}) {
       roundtrip: {
         opsSec: Math.round((iterations / (totalJwtHsSignMs + totalJwtHsVerifyMs)) * 1000),
         totalTimeMs: Number((totalJwtHsSignMs + totalJwtHsVerifyMs).toFixed(2)),
+        // Rata-rata Roundtrip (µs) = (Total Waktu ms * 1000) / Jumlah Iterasi
         avgLatencyUs: Number(((totalJwtHsSignMs + totalJwtHsVerifyMs) * 1000 / iterations).toFixed(2))
       }
     }
   };
 
-  // ===== 2. PASETO v4.local (Symmetric AEAD Encrypt & Decrypt) =====
+  // --------------------------------------------------------------------------
+  // TAHAP 3: Pengujian PASETO v4.local (Symmetric AEAD XChaCha20-Poly1305 + BLAKE2b)
+  // --------------------------------------------------------------------------
+  // A. Pengukuran Waktu Enkripsi AEAD v4.local
   const pasetoLocEncLatencies = [];
   let samplePasetoLoc = '';
   const startPasetoLocEnc = process.hrtime.bigint();
@@ -480,6 +514,7 @@ async function runBenchmarkEngine(options = {}) {
   const endPasetoLocEnc = process.hrtime.bigint();
   const totalPasetoLocEncMs = Number(endPasetoLocEnc - startPasetoLocEnc) / 1e6;
 
+  // B. Pengukuran Waktu Dekripsi & Autentikasi AEAD v4.local
   const pasetoLocDecLatencies = [];
   const startPasetoLocDec = process.hrtime.bigint();
   for (let i = 0; i < iterations; i++) {
@@ -491,6 +526,7 @@ async function runBenchmarkEngine(options = {}) {
   const endPasetoLocDec = process.hrtime.bigint();
   const totalPasetoLocDecMs = Number(endPasetoLocDec - startPasetoLocDec) / 1e6;
 
+  // C. Kalkulasi Throughput, Ukuran & Struktur Byte PASETO v4.local
   const pasetoLocStats = {
     name: 'PASETO (v4.local)',
     type: 'Symmetric AEAD (XChaCha20-Poly1305 + BLAKE2b)',
@@ -501,9 +537,9 @@ async function runBenchmarkEngine(options = {}) {
     overheadBytes: Buffer.byteLength(samplePasetoLoc) - rawPayloadBytes,
     overheadPercentage: Number((((Buffer.byteLength(samplePasetoLoc) - rawPayloadBytes) / rawPayloadBytes) * 100).toFixed(1)),
     structureBreakdown: {
-      headerBytes: 9, // 'v4.local.'
-      payloadBytes: Buffer.byteLength(samplePasetoLoc) - 9 - 32 - 32, // Ciphertext & Nonce
-      signatureBytes: 32 // 256-bit BLAKE2b Auth Tag
+      headerBytes: 9, // Konstanta string 'v4.local.'
+      payloadBytes: Buffer.byteLength(samplePasetoLoc) - 9 - 32 - 32, // Ciphertext & 32-Byte Nonce
+      signatureBytes: 32 // 256-bit BLAKE2b Authentication Tag
     },
     performance: {
       encrypt: {
@@ -524,7 +560,10 @@ async function runBenchmarkEngine(options = {}) {
     }
   };
 
-  // ===== 3. PASETO v4.public (Asymmetric Ed25519 Sign & Verify) =====
+  // --------------------------------------------------------------------------
+  // TAHAP 4: Pengujian PASETO v4.public (Asymmetric Ed25519 Sign & Verify)
+  // --------------------------------------------------------------------------
+  // A. Pengukuran Waktu Signing Asimetris Ed25519
   const pasetoPubSignLatencies = [];
   let samplePasetoPub = '';
   const startPasetoPubSign = process.hrtime.bigint();
@@ -537,6 +576,7 @@ async function runBenchmarkEngine(options = {}) {
   const endPasetoPubSign = process.hrtime.bigint();
   const totalPasetoPubSignMs = Number(endPasetoPubSign - startPasetoPubSign) / 1e6;
 
+  // B. Pengukuran Waktu Verifikasi Asimetris Ed25519
   const pasetoPubVerifyLatencies = [];
   const startPasetoPubVerify = process.hrtime.bigint();
   for (let i = 0; i < iterations; i++) {
@@ -548,6 +588,7 @@ async function runBenchmarkEngine(options = {}) {
   const endPasetoPubVerify = process.hrtime.bigint();
   const totalPasetoPubVerifyMs = Number(endPasetoPubVerify - startPasetoPubVerify) / 1e6;
 
+  // C. Kalkulasi Throughput, Ukuran & Struktur Byte PASETO v4.public
   const pasetoPubStats = {
     name: 'PASETO (v4.public)',
     type: 'Asymmetric (Ed25519 / EdDSA)',
@@ -558,9 +599,9 @@ async function runBenchmarkEngine(options = {}) {
     overheadBytes: Buffer.byteLength(samplePasetoPub) - rawPayloadBytes,
     overheadPercentage: Number((((Buffer.byteLength(samplePasetoPub) - rawPayloadBytes) / rawPayloadBytes) * 100).toFixed(1)),
     structureBreakdown: {
-      headerBytes: 10, // 'v4.public.'
-      payloadBytes: Buffer.byteLength(samplePasetoPub) - 10 - 86, // Base64url claims
-      signatureBytes: 86 // Ed25519 signature base64url
+      headerBytes: 10, // Konstanta string 'v4.public.'
+      payloadBytes: Buffer.byteLength(samplePasetoPub) - 10 - 86, // Base64url Plaintext Claims
+      signatureBytes: 86 // Base64url dari 64-byte Ed25519 signature
     },
     performance: {
       sign: {
