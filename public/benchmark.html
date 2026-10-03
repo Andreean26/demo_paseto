@@ -23,10 +23,10 @@
       <!-- Hero Banner -->
       <section class="panel benchmark-hero">
         <div class="hero-text-wrap">
-          <p class="eyebrow">Analisis Performa & Kriptografi</p>
-          <h1>Benchmark Parametrik JWT vs PASETO</h1>
+          <p class="eyebrow">Analisis Performa Multi-Putaran</p>
+          <h1>Benchmark Kriptografi: JWT vs PASETO</h1>
           <p class="lead">
-            Uji performa riil secara kuantitatif antara standar token <strong>JWT (jsonwebtoken)</strong> dan <strong>PASETO (panva/paseto)</strong>. Bandingkan kecepatan eksekusi (Ops/sec & Latensi $\mu$s), ukuran byte, overhead payload, serta karakteristik keamanan kriptografi.
+            Pengujian sampling berulang (minimal 10 putaran uji) untuk membandingkan throughput kecepatan rata-rata, kestabilan performa antar-putaran, dan ukuran byte token secara riil.
           </p>
         </div>
         <div class="benchmark-meta-badge" id="envBadge">
@@ -36,32 +36,30 @@
         </div>
       </section>
 
-      <!-- Control Panel & Parameter Settings -->
+      <!-- Control Panel -->
       <section class="panel benchmark-controls-panel">
         <div class="controls-header">
           <div>
             <p class="eyebrow">Konfigurasi Pengujian</p>
-            <h2>Parameter Benchmark</h2>
+            <h2>Parameter Benchmark Multi-Putaran</h2>
           </div>
           <div class="controls-actions">
             <button class="primary-button" id="runBtn" type="button">
-              <span id="runBtnText">Jalankan Benchmark</span>
+              <span id="runBtnText">&#9889; Jalankan Benchmark (10x Sampel)</span>
             </button>
-            <button class="quiet-button" id="quickBtn" type="button">Quick Test (500 ops)</button>
+            <button class="quiet-button" id="quickBtn" type="button">Uji Cepat (10 Putaran)</button>
           </div>
         </div>
 
         <div class="parameters-grid">
           <div class="param-card">
-            <label for="iterationsSelect">Jumlah Iterasi Siklus</label>
-            <select id="iterationsSelect">
-              <option value="100">100 Siklus (Cepat)</option>
-              <option value="500">500 Siklus</option>
-              <option value="1000" selected>1.000 Siklus (Direkomendasikan)</option>
-              <option value="2500">2.500 Siklus (Akurat)</option>
-              <option value="5000">5.000 Siklus (Stress Test)</option>
+            <label for="roundsSelect">Jumlah Putaran Sampel (Minimal 10x)</label>
+            <select id="roundsSelect">
+              <option value="10" selected>10 Putaran Sampel (Standar Rekomendasi)</option>
+              <option value="20">20 Putaran Sampel (Akurat)</option>
+              <option value="30">30 Putaran Sampel (High Precision)</option>
             </select>
-            <p class="param-hint">Mengukur rata-rata latensi dan distribusi persentil (p50, p95, p99).</p>
+            <p class="param-hint">Menjalankan pengujian berulang untuk mengukur kestabilan statistik.</p>
           </div>
 
           <div class="param-card">
@@ -71,16 +69,9 @@
               <option value="standard" selected>Standar User Session (~250 Bytes, Profil & Roles)</option>
               <option value="rich">Rich Claims (~1 KB, Scope, Device, Geo, MFA)</option>
               <option value="large">Enterprise Payload (~5 KB, Audit & Matrix Hak Akses)</option>
-              <option value="custom">Kustom JSON Payload</option>
             </select>
             <p class="param-hint" id="payloadSizeHint">Ukuran mentah JSON payload: <strong id="rawSizeLabel">-</strong></p>
           </div>
-        </div>
-
-        <!-- Custom JSON payload collapse -->
-        <div class="custom-payload-wrap" id="customPayloadWrap" hidden>
-          <label for="customJsonInput">Payload JSON Kustom</label>
-          <textarea id="customJsonInput" spellcheck="false" placeholder='{\n  "sub": "user_123",\n  "role": "ADMIN"\n}'></textarea>
         </div>
 
         <div class="progress-bar-wrap" id="progressWrap" hidden>
@@ -88,36 +79,31 @@
         </div>
       </section>
 
-      <!-- KPI Metric Cards -->
+      <!-- KPI Metric Cards (Hasil Utama Rata-rata) -->
       <section class="kpi-grid" id="kpiGrid">
         <div class="panel kpi-card">
-          <div class="kpi-label">JWT Sign Speed</div>
-          <div class="kpi-value cyan" id="kpiJwtSign">-</div>
-          <div class="kpi-sub" id="kpiJwtSignSub">Ops/Detik</div>
+          <div class="kpi-label">JWT (HS256) Throughput</div>
+          <div class="kpi-value cyan" id="kpiJwtRoundtrip">-</div>
+          <div class="kpi-sub" id="kpiJwtSub">Rata-rata Ops/Detik (Signing + Verify)</div>
         </div>
         <div class="panel kpi-card">
-          <div class="kpi-label">PASETO Encrypt Speed</div>
-          <div class="kpi-value green" id="kpiPasetoEnc">-</div>
-          <div class="kpi-sub" id="kpiPasetoEncSub">Ops/Detik</div>
+          <div class="kpi-label">PASETO (v4.local) Throughput</div>
+          <div class="kpi-value green" id="kpiPasetoLocRoundtrip">-</div>
+          <div class="kpi-sub" id="kpiPasetoLocSub">Rata-rata Ops/Detik (AEAD Encrypt + Decrypt)</div>
         </div>
         <div class="panel kpi-card">
-          <div class="kpi-label">JWT Verify Speed</div>
-          <div class="kpi-value cyan" id="kpiJwtVerify">-</div>
-          <div class="kpi-sub" id="kpiJwtVerifySub">Ops/Detik</div>
-        </div>
-        <div class="panel kpi-card">
-          <div class="kpi-label">PASETO Decrypt Speed</div>
-          <div class="kpi-value green" id="kpiPasetoDec">-</div>
-          <div class="kpi-sub" id="kpiPasetoDecSub">Ops/Detik</div>
+          <div class="kpi-label">PASETO (v4.public) Throughput</div>
+          <div class="kpi-value yellow" id="kpiPasetoPubRoundtrip">-</div>
+          <div class="kpi-sub" id="kpiPasetoPubSub">Rata-rata Ops/Detik (Asymmetric Ed25519)</div>
         </div>
       </section>
 
-      <!-- Visual Charts: Speed & Latency -->
+      <!-- Visual Charts: Generate Time vs Verify Time -->
       <section class="panel chart-section">
         <div class="chart-header">
           <div>
-            <p class="eyebrow">Grafik Metrik Kecepatan</p>
-            <h2>Perbandingan Kecepatan (Throughput & Latensi)</h2>
+            <p class="eyebrow">Analisis Waktu Proses Kriptografi</p>
+            <h2>1. Perbandingan Waktu: Pembuatan vs Verifikasi Token</h2>
           </div>
           <div class="chart-legend">
             <span class="legend-item"><span class="legend-dot jwt-dot"></span> JWT (HS256)</span>
@@ -127,114 +113,59 @@
         </div>
 
         <div class="charts-container">
-          <!-- Generation / Encryption Chart -->
+          <!-- 1A. Generate Time Chart -->
           <div class="chart-card">
-            <h3>1. Kecepatan Pembuatan (Sign / Encrypt)</h3>
-            <p class="muted">Berapa banyak token yang dapat dibuat per detik (Ops/sec — Lebih tinggi lebih baik).</p>
-            <div class="bar-chart-wrap" id="chartSignOps"></div>
+            <h3>1A. Waktu Pembuatan (Generate Time)</h3>
+            <p class="muted">Durasi eksekusi saat token dibuat (Signing / Enkripsi AEAD).</p>
+            <div class="bar-chart-wrap" id="chartGenerateTime"></div>
           </div>
 
-          <!-- Verification / Decryption Chart -->
+          <!-- 1B. Verify Time Chart -->
           <div class="chart-card">
-            <h3>2. Kecepatan Verifikasi (Verify / Decrypt)</h3>
-            <p class="muted">Berapa banyak token yang dapat divalidasi per detik (Ops/sec — Lebih tinggi lebih baik).</p>
-            <div class="bar-chart-wrap" id="chartVerifyOps"></div>
-          </div>
-
-          <!-- Latency Distribution Chart -->
-          <div class="chart-card full-width">
-            <h3>3. Rata-rata Latensi Roundtrip & Persentil (&mu;s per Operasi)</h3>
-            <p class="muted">Waktu yang dibutuhkan untuk membuat dan memverifikasi token (Lebih rendah lebih cepat).</p>
-            <div class="latency-table-wrap">
-              <table class="benchmark-table">
-                <thead>
-                  <tr>
-                    <th>Algoritma Token</th>
-                    <th>Tipe Kripto</th>
-                    <th>Mean Latency</th>
-                    <th>p50 (Median)</th>
-                    <th>p95</th>
-                    <th>p99</th>
-                    <th>Total Roundtrip</th>
-                  </tr>
-                </thead>
-                <tbody id="latencyTableBody">
-                  <tr>
-                    <td colspan="7" class="text-center muted">Menunggu benchmark dijalankan...</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <h3>1B. Waktu Verifikasi (Verify Time)</h3>
+            <p class="muted">Durasi eksekusi saat token divalidasi oleh server API.</p>
+            <div class="bar-chart-wrap" id="chartVerifyTime"></div>
           </div>
         </div>
       </section>
 
-      <!-- Visual Charts: Size & Overhead Analysis -->
+      <!-- Visual Chart: 10-Round Consistency Trend -->
+      <section class="panel chart-section">
+        <div class="chart-header">
+          <div>
+            <p class="eyebrow">Grafik Kestabilan Multi-Putaran</p>
+            <h2 id="trendTitle">2. Grafik Konsistensi 10 Putaran Pengujian</h2>
+          </div>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-dot jwt-dot"></span> JWT (HS256)</span>
+            <span class="legend-item"><span class="legend-dot paseto-dot"></span> PASETO (v4.local)</span>
+            <span class="legend-item"><span class="legend-dot paseto-pub-dot"></span> PASETO (v4.public)</span>
+          </div>
+        </div>
+
+        <div class="trend-chart-card">
+          <p class="muted" id="trendSubtitle">Membandingkan throughput masing-masing token dari Putaran 1 sampai Putaran 10 (Arahkan kursor pada bar untuk melihat detail ops/s).</p>
+          <div class="trend-bars-grid" id="trendBarsGrid">
+            <!-- Dynamically populated 10 round bars -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Visual Charts: Size Analysis -->
       <section class="panel chart-section">
         <div class="chart-header">
           <div>
             <p class="eyebrow">Analisis Ukuran Data</p>
-            <h2>Perbandingan Ukuran Token & Overhead Bytes</h2>
+            <h2>3. Perbandingan Ukuran Token & Overhead Bytes</h2>
           </div>
         </div>
 
         <div class="charts-container">
           <!-- Size Comparison Bar -->
-          <div class="chart-card">
-            <h3>Ukuran Total Token (Bytes)</h3>
-            <p class="muted">Ukuran token yang dikirimkan pada header HTTP Authorization.</p>
-            <div class="bar-chart-wrap" id="chartSize"></div>
-          </div>
-
-          <!-- Overhead Ratio Bar -->
-          <div class="chart-card">
-            <h3>Overhead Kriptografi (%)</h3>
-            <p class="muted">Persentase penambahan ukuran dibanding raw JSON payload asli.</p>
-            <div class="bar-chart-wrap" id="chartOverhead"></div>
-          </div>
-
-          <!-- Structural Token Breakdown -->
           <div class="chart-card full-width">
-            <div class="structure-visual-list" id="structureList">
-              <!-- JWT HS256 -->
-              <div class="structure-card">
-                <div class="structure-header">
-                  <div class="structure-title-group">
-                    <strong>JWT (HS256)</strong>
-                    <span class="badge badge-warning">Plaintext / Signed</span>
-                  </div>
-                  <span class="structure-size-badge" id="jwtSizeSummary">-</span>
-                </div>
-                <div class="segmented-bar" id="jwtSegmentedBar"></div>
-                <div class="segment-legend-grid" id="jwtLegendGrid"></div>
-              </div>
-
-              <!-- PASETO v4.local -->
-              <div class="structure-card">
-                <div class="structure-header">
-                  <div class="structure-title-group">
-                    <strong>PASETO (v4.local)</strong>
-                    <span class="badge badge-success">Encrypted AEAD</span>
-                  </div>
-                  <span class="structure-size-badge" id="pasetoLocSizeSummary">-</span>
-                </div>
-                <div class="segmented-bar" id="pasetoLocSegmentedBar"></div>
-                <div class="segment-legend-grid" id="pasetoLocLegendGrid"></div>
-              </div>
-
-              <!-- PASETO v4.public -->
-              <div class="structure-card">
-                <div class="structure-header">
-                  <div class="structure-title-group">
-                    <strong>PASETO (v4.public)</strong>
-                    <span class="badge badge-warning">Asymmetric Signed</span>
-                  </div>
-                  <span class="structure-size-badge" id="pasetoPubSizeSummary">-</span>
-                </div>
-                <div class="segmented-bar" id="pasetoPubSegmentedBar"></div>
-                <div class="segment-legend-grid" id="pasetoPubLegendGrid"></div>
-              </div>
-            </div>
+            <h3>Ukuran Total Token (Bytes — Lebih kecil lebih efisien)</h3>
+            <p class="muted">Ukuran token yang dikirimkan pada header HTTP Authorization dibandingkan dengan JSON payload asli.</p>
+            <div class="bar-chart-wrap" id="chartSize"></div>
           </div>
         </div>
       </section>
@@ -257,7 +188,6 @@
           <code class="token-code mono" id="tokenPreviewCode">-</code>
         </div>
       </section>
-
       <!-- Comprehensive Parametric Matrix Table -->
       <section class="panel matrix-panel">
         <p class="eyebrow">Matriks Evaluasi Menyeluruh</p>

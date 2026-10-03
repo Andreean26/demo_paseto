@@ -40,7 +40,7 @@ function setResult(text, kind) {
 
 function getSelectedPasetoFormat() {
   const checked = document.querySelector('input[name="pasetoFormat"]:checked');
-  return checked ? checked.value : 'v4.public';
+  return checked ? checked.value : 'v4.local';
 }
 
 function updatePasetoFormatCards() {
@@ -68,20 +68,14 @@ function setModeText(mode) {
     const format = getSelectedPasetoFormat();
     if (format === 'v4.local') {
       tokenHint.textContent =
-        'Token PASETO memakai library standar (v4.local / AEAD XChaCha20-Poly1305) dan payload-nya terenkripsi penuh. Coba rusak satu karakter, lalu akses brankas.';
-    } else if (format === 'v3.local') {
-      tokenHint.textContent =
-        'Token PASETO memakai library standar (v3.local / AEAD AES-256-CTR) dan payload-nya terenkripsi penuh. Coba rusak satu karakter, lalu akses brankas.';
-    } else if (format === 'v3.public') {
-      tokenHint.textContent =
-        'Token PASETO memakai library standar (v3.public / NIST ECDSA). Payload terbaca, ditandatangani digital signature. Coba rusak satu karakter, lalu akses brankas.';
+        'Token PASETO v4.local (AEAD XChaCha20-Poly1305) terenkripsi penuh. Coba tekan "Rusak 1 karakter", lalu akses brankas.';
     } else {
       tokenHint.textContent =
-        'Token PASETO memakai library standar (v4.public / Ed25519). Payload terbaca, ditandatangani digital signature. Coba rusak satu karakter, lalu akses brankas.';
+        'Token PASETO v4.public (Ed25519). Payload terbaca publik namun dilindungi digital signature. Coba tekan "Rusak 1 karakter", lalu akses brankas.';
     }
   } else {
     tokenHint.textContent =
-      'Token JWT dibuat dengan library standar jsonwebtoken. Coba Forge JWT ADMIN, lalu akses brankas.';
+      'Token JWT dibuat dengan HMAC. Tekan "Forge alg:none (ADMIN)" untuk membobol brankas tanpa signature.';
   }
 }
 
@@ -427,7 +421,7 @@ function forgeJwt() {
   tokenBox.value = `${toBase64UrlJson(header)}.${toBase64UrlJson(payload)}.`;
   roleLabel.textContent = 'ADMIN';
   refreshDecoder();
-  setResult('JWT palsu dibuat dengan alg:none. Kirim ke brankas saat mode JWT aktif.', null);
+  setResult('JWT palsu berhasil dibuat dengan alg:none dan role ADMIN. Klik "Akses brankas rahasia"!', null);
 }
 
 // ===== PASETO-style: simulasi perubahan token untuk menguji autentikasi AEAD & Digital Signature =====

@@ -403,8 +403,8 @@ function calculateStats(latencies) {
 // SECTION BENCHMARK ENGINE: Pengujian Kriptografi Riil Berbasis Hardware Timer
 // ============================================================================
 async function runBenchmarkEngine(options = {}) {
-  // Batasi iterasi antara 10 hingga 5.000 untuk stabilitas CPU
-  const iterations = Math.max(10, Math.min(Number(options.iterations || 1000), 5000));
+  // Minimal 10 putaran sampling untuk reliabilitas statistik
+  const rounds = Math.max(10, Math.min(Number(options.rounds || 10), 50));
   const presetKey = options.preset && PAYLOAD_PRESETS[options.preset] ? options.preset : 'standard';
   const custom = options.customPayload && typeof options.customPayload === 'object' ? options.customPayload : null;
   const basePayload = custom || PAYLOAD_PRESETS[presetKey];
@@ -417,11 +417,8 @@ async function runBenchmarkEngine(options = {}) {
   const rawJson = JSON.stringify(payload);
   const rawPayloadBytes = Buffer.byteLength(rawJson);
 
-  // --------------------------------------------------------------------------
-  // TAHAP 1: Warmup Run (Pemanasan V8 JIT Compiler)
-  // Menghindari distorsi cold-start agar fungsi masuk ke CPU Hot Path
-  // --------------------------------------------------------------------------
-  for (let i = 0; i < 20; i++) {
+  // Warmup Run (Pemanasan V8 JIT Compiler)
+  for (let i = 0; i < 15; i++) {
     const tJwtHs = jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
     jwt.verify(tJwtHs, JWT_SECRET, { algorithms: ['HS256'] });
     const tPasLoc = v4LocalEncrypt(payload, PASETO_LOCAL_RAW);
@@ -430,36 +427,125 @@ async function runBenchmarkEngine(options = {}) {
     await V4.verify(tPasPub, ASYMMETRIC_ED_KEYPAIR.publicKey);
   }
 
-  // --------------------------------------------------------------------------
-  // TAHAP 2: Pengujian JWT HS256 (Symmetric HMAC-SHA256)
-  // --------------------------------------------------------------------------
-  // A. Pengukuran Waktu Signing JWT
-  const jwtHsSignLatencies = [];
+  // Operasi per putaran (misal 100 ops x 10 putaran = 1.000 total operasi)
+  const requestedIterations = Number(options.iterations || 1000);
+  const opsPerRound = Math.max(10, Math.min(Math.round(requestedIterations / rounds), 200));
+  const totalOps = rounds * opsPerRound;
+
+  const roundsHistory = [];
+  const allJwtHsSignLatencies = [];
+  const allJwtHsVerifyLatencies = [];
+  const allPasetoLocEncLatencies = [];
+  const allPasetoLocDecLatencies = [];
+  const allPasetoPubSignLatencies = [];
+  const allPasetoPubVerifyLatencies = [];
+
   let sampleJwtHs = '';
-  const startJwtHsSign = process.hrtime.bigint(); // Timer presisi nanodetik
-  for (let i = 0; i < iterations; i++) {
-    const t0 = process.hrtime.bigint();
-    sampleJwtHs = jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
-    const t1 = process.hrtime.bigint();
-    // Konversi selisih nanodetik (ns) ke mikrodetik (µs)
-    jwtHsSignLatencies.push(Number(t1 - t0) / 1000);
-  }
-  const endJwtHsSign = process.hrtime.bigint();
-  const totalJwtHsSignMs = Number(endJwtHsSign - startJwtHsSign) / 1e6;
+  let samplePasetoLoc = '';
+  let samplePasetoPub = '';
 
-  // B. Pengukuran Waktu Verifikasi JWT
-  const jwtHsVerifyLatencies = [];
-  const startJwtHsVerify = process.hrtime.bigint();
-  for (let i = 0; i < iterations; i++) {
-    const t0 = process.hrtime.bigint();
-    jwt.verify(sampleJwtHs, JWT_SECRET, { algorithms: ['HS256'] });
-    const t1 = process.hrtime.bigint();
-    jwtHsVerifyLatencies.push(Number(t1 - t0) / 1000);
-  }
-  const endJwtHsVerify = process.hrtime.bigint();
-  const totalJwtHsVerifyMs = Number(endJwtHsVerify - startJwtHsVerify) / 1e6;
+  // Eksekusi N Putaran Sampel (Minimal 10 Putaran)
+  for (let r = 0; r < rounds; r++) {
+    // 1. JWT HS256
+    const startJwtSign = process.hrtime.bigint();
+    for (let i = 0; i < opsPerRound; i++) {
+      const t0 = process.hrtime.bigint();
+      sampleJwtHs = jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256' });
+      const t1 = process.hrtime.bigint();
+      allJwtHsSignLatencies.push(Number(t1 - t0) / 1000);
+    }
+    const endJwtSign = process.hrtime.bigint();
+    const roundJwtSignMs = Number(endJwtSign - startJwtSign) / 1e6;
 
-  // C. Kalkulasi Throughput (Ops/sec), Ukuran & Overhead JWT
+    const startJwtVerify = process.hrtime.bigint();
+    for (let i = 0; i < opsPerRound; i++) {
+      const t0 = process.hrtime.bigint();
+      jwt.verify(sampleJwtHs, JWT_SECRET, { algorithms: ['HS256'] });
+      const t1 = process.hrtime.bigint();
+      allJwtHsVerifyLatencies.push(Number(t1 - t0) / 1000);
+    }
+    const endJwtVerify = process.hrtime.bigint();
+    const roundJwtVerifyMs = Number(endJwtVerify - startJwtVerify) / 1e6;
+
+    // 2. PASETO v4.local (Symmetric AEAD)
+    const startLocEnc = process.hrtime.bigint();
+    for (let i = 0; i < opsPerRound; i++) {
+      const t0 = process.hrtime.bigint();
+      samplePasetoLoc = v4LocalEncrypt(payload, PASETO_LOCAL_RAW);
+      const t1 = process.hrtime.bigint();
+      allPasetoLocEncLatencies.push(Number(t1 - t0) / 1000);
+    }
+    const endLocEnc = process.hrtime.bigint();
+    const roundLocEncMs = Number(endLocEnc - startLocEnc) / 1e6;
+
+    const startLocDec = process.hrtime.bigint();
+    for (let i = 0; i < opsPerRound; i++) {
+      const t0 = process.hrtime.bigint();
+      v4LocalDecrypt(samplePasetoLoc, PASETO_LOCAL_RAW);
+      const t1 = process.hrtime.bigint();
+      allPasetoLocDecLatencies.push(Number(t1 - t0) / 1000);
+    }
+    const endLocDec = process.hrtime.bigint();
+    const roundLocDecMs = Number(endLocDec - startLocDec) / 1e6;
+
+    // 3. PASETO v4.public (Asymmetric Ed25519)
+    const startPubSign = process.hrtime.bigint();
+    for (let i = 0; i < opsPerRound; i++) {
+      const t0 = process.hrtime.bigint();
+      samplePasetoPub = await V4.sign(payload, ASYMMETRIC_ED_KEYPAIR.privateKey);
+      const t1 = process.hrtime.bigint();
+      allPasetoPubSignLatencies.push(Number(t1 - t0) / 1000);
+    }
+    const endPubSign = process.hrtime.bigint();
+    const roundPubSignMs = Number(endPubSign - startPubSign) / 1e6;
+
+    const startPubVerify = process.hrtime.bigint();
+    for (let i = 0; i < opsPerRound; i++) {
+      const t0 = process.hrtime.bigint();
+      await V4.verify(samplePasetoPub, ASYMMETRIC_ED_KEYPAIR.publicKey);
+      const t1 = process.hrtime.bigint();
+      allPasetoPubVerifyLatencies.push(Number(t1 - t0) / 1000);
+    }
+    const endPubVerify = process.hrtime.bigint();
+    const roundPubVerifyMs = Number(endPubVerify - startPubVerify) / 1e6;
+
+    roundsHistory.push({
+      round: r + 1,
+      jwtHs: {
+        signOpsSec: Math.round((opsPerRound / roundJwtSignMs) * 1000),
+        verifyOpsSec: Math.round((opsPerRound / roundJwtVerifyMs) * 1000),
+        roundtripOpsSec: Math.round((opsPerRound / (roundJwtSignMs + roundJwtVerifyMs)) * 1000),
+        avgLatencyUs: Number(((roundJwtSignMs + roundJwtVerifyMs) * 1000 / opsPerRound).toFixed(1))
+      },
+      pasetoLoc: {
+        encryptOpsSec: Math.round((opsPerRound / roundLocEncMs) * 1000),
+        decryptOpsSec: Math.round((opsPerRound / roundLocDecMs) * 1000),
+        roundtripOpsSec: Math.round((opsPerRound / (roundLocEncMs + roundLocDecMs)) * 1000),
+        avgLatencyUs: Number(((roundLocEncMs + roundLocDecMs) * 1000 / opsPerRound).toFixed(1))
+      },
+      pasetoPub: {
+        signOpsSec: Math.round((opsPerRound / roundPubSignMs) * 1000),
+        verifyOpsSec: Math.round((opsPerRound / roundPubVerifyMs) * 1000),
+        roundtripOpsSec: Math.round((opsPerRound / (roundPubSignMs + roundPubVerifyMs)) * 1000),
+        avgLatencyUs: Number(((roundPubSignMs + roundPubVerifyMs) * 1000 / opsPerRound).toFixed(1))
+      }
+    });
+  }
+
+  // Rata-rata Throughput Across All Rounds
+  const avgJwtHsSignOps = Math.round(roundsHistory.reduce((acc, r) => acc + r.jwtHs.signOpsSec, 0) / rounds);
+  const avgJwtHsVerifyOps = Math.round(roundsHistory.reduce((acc, r) => acc + r.jwtHs.verifyOpsSec, 0) / rounds);
+  const avgJwtHsRoundtripOps = Math.round(roundsHistory.reduce((acc, r) => acc + r.jwtHs.roundtripOpsSec, 0) / rounds);
+
+  const avgPasetoLocEncOps = Math.round(roundsHistory.reduce((acc, r) => acc + r.pasetoLoc.encryptOpsSec, 0) / rounds);
+  const avgPasetoLocDecOps = Math.round(roundsHistory.reduce((acc, r) => acc + r.pasetoLoc.decryptOpsSec, 0) / rounds);
+  const avgPasetoLocRoundtripOps = Math.round(roundsHistory.reduce((acc, r) => acc + r.pasetoLoc.roundtripOpsSec, 0) / rounds);
+
+  const avgPasetoPubSignOps = Math.round(roundsHistory.reduce((acc, r) => acc + r.pasetoPub.signOpsSec, 0) / rounds);
+  const avgPasetoPubVerifyOps = Math.round(roundsHistory.reduce((acc, r) => acc + r.pasetoPub.verifyOpsSec, 0) / rounds);
+  const avgPasetoPubRoundtripOps = Math.round(roundsHistory.reduce((acc, r) => acc + r.pasetoPub.roundtripOpsSec, 0) / rounds);
+
+  // Metrik JWT HS256
   const jwtHsParts = sampleJwtHs.split('.');
   const jwtHsStats = {
     name: 'JWT (HS256)',
@@ -468,9 +554,7 @@ async function runBenchmarkEngine(options = {}) {
     charLength: sampleJwtHs.length,
     byteSize: Buffer.byteLength(sampleJwtHs),
     rawPayloadBytes,
-    // Overhead = Ukuran Token - Ukuran JSON Asli
     overheadBytes: Buffer.byteLength(sampleJwtHs) - rawPayloadBytes,
-    // Persentase Overhead = ((TokenBytes - RawBytes) / RawBytes) * 100%
     overheadPercentage: Number((((Buffer.byteLength(sampleJwtHs) - rawPayloadBytes) / rawPayloadBytes) * 100).toFixed(1)),
     structureBreakdown: {
       headerBytes: Buffer.byteLength(jwtHsParts[0] || ''),
@@ -479,54 +563,21 @@ async function runBenchmarkEngine(options = {}) {
     },
     performance: {
       sign: {
-        // Throughput = (Iterasi / Total Durasi ms) * 1000 = Ops per Detik
-        opsSec: Math.round((iterations / totalJwtHsSignMs) * 1000),
-        totalTimeMs: Number(totalJwtHsSignMs.toFixed(2)),
-        stats: calculateStats(jwtHsSignLatencies)
+        opsSec: avgJwtHsSignOps,
+        stats: calculateStats(allJwtHsSignLatencies)
       },
       verify: {
-        opsSec: Math.round((iterations / totalJwtHsVerifyMs) * 1000),
-        totalTimeMs: Number(totalJwtHsVerifyMs.toFixed(2)),
-        stats: calculateStats(jwtHsVerifyLatencies)
+        opsSec: avgJwtHsVerifyOps,
+        stats: calculateStats(allJwtHsVerifyLatencies)
       },
       roundtrip: {
-        opsSec: Math.round((iterations / (totalJwtHsSignMs + totalJwtHsVerifyMs)) * 1000),
-        totalTimeMs: Number((totalJwtHsSignMs + totalJwtHsVerifyMs).toFixed(2)),
-        // Rata-rata Roundtrip (µs) = (Total Waktu ms * 1000) / Jumlah Iterasi
-        avgLatencyUs: Number(((totalJwtHsSignMs + totalJwtHsVerifyMs) * 1000 / iterations).toFixed(2))
+        opsSec: avgJwtHsRoundtripOps,
+        avgLatencyUs: Number(((roundsHistory.reduce((acc, r) => acc + r.jwtHs.avgLatencyUs, 0)) / rounds).toFixed(1))
       }
     }
   };
 
-  // --------------------------------------------------------------------------
-  // TAHAP 3: Pengujian PASETO v4.local (Symmetric AEAD XChaCha20-Poly1305 + BLAKE2b)
-  // --------------------------------------------------------------------------
-  // A. Pengukuran Waktu Enkripsi AEAD v4.local
-  const pasetoLocEncLatencies = [];
-  let samplePasetoLoc = '';
-  const startPasetoLocEnc = process.hrtime.bigint();
-  for (let i = 0; i < iterations; i++) {
-    const t0 = process.hrtime.bigint();
-    samplePasetoLoc = v4LocalEncrypt(payload, PASETO_LOCAL_RAW);
-    const t1 = process.hrtime.bigint();
-    pasetoLocEncLatencies.push(Number(t1 - t0) / 1000);
-  }
-  const endPasetoLocEnc = process.hrtime.bigint();
-  const totalPasetoLocEncMs = Number(endPasetoLocEnc - startPasetoLocEnc) / 1e6;
-
-  // B. Pengukuran Waktu Dekripsi & Autentikasi AEAD v4.local
-  const pasetoLocDecLatencies = [];
-  const startPasetoLocDec = process.hrtime.bigint();
-  for (let i = 0; i < iterations; i++) {
-    const t0 = process.hrtime.bigint();
-    v4LocalDecrypt(samplePasetoLoc, PASETO_LOCAL_RAW);
-    const t1 = process.hrtime.bigint();
-    pasetoLocDecLatencies.push(Number(t1 - t0) / 1000);
-  }
-  const endPasetoLocDec = process.hrtime.bigint();
-  const totalPasetoLocDecMs = Number(endPasetoLocDec - startPasetoLocDec) / 1e6;
-
-  // C. Kalkulasi Throughput, Ukuran & Struktur Byte PASETO v4.local
+  // Metrik PASETO v4.local
   const pasetoLocStats = {
     name: 'PASETO (v4.local)',
     type: 'Symmetric AEAD (XChaCha20-Poly1305 + BLAKE2b)',
@@ -537,58 +588,27 @@ async function runBenchmarkEngine(options = {}) {
     overheadBytes: Buffer.byteLength(samplePasetoLoc) - rawPayloadBytes,
     overheadPercentage: Number((((Buffer.byteLength(samplePasetoLoc) - rawPayloadBytes) / rawPayloadBytes) * 100).toFixed(1)),
     structureBreakdown: {
-      headerBytes: 9, // Konstanta string 'v4.local.'
-      payloadBytes: Buffer.byteLength(samplePasetoLoc) - 9 - 32 - 32, // Ciphertext & 32-Byte Nonce
-      signatureBytes: 32 // 256-bit BLAKE2b Authentication Tag
+      headerBytes: 9,
+      payloadBytes: Buffer.byteLength(samplePasetoLoc) - 9 - 32 - 32,
+      signatureBytes: 32
     },
     performance: {
       encrypt: {
-        opsSec: Math.round((iterations / totalPasetoLocEncMs) * 1000),
-        totalTimeMs: Number(totalPasetoLocEncMs.toFixed(2)),
-        stats: calculateStats(pasetoLocEncLatencies)
+        opsSec: avgPasetoLocEncOps,
+        stats: calculateStats(allPasetoLocEncLatencies)
       },
       decrypt: {
-        opsSec: Math.round((iterations / totalPasetoLocDecMs) * 1000),
-        totalTimeMs: Number(totalPasetoLocDecMs.toFixed(2)),
-        stats: calculateStats(pasetoLocDecLatencies)
+        opsSec: avgPasetoLocDecOps,
+        stats: calculateStats(allPasetoLocDecLatencies)
       },
       roundtrip: {
-        opsSec: Math.round((iterations / (totalPasetoLocEncMs + totalPasetoLocDecMs)) * 1000),
-        totalTimeMs: Number((totalPasetoLocEncMs + totalPasetoLocDecMs).toFixed(2)),
-        avgLatencyUs: Number(((totalPasetoLocEncMs + totalPasetoLocDecMs) * 1000 / iterations).toFixed(2))
+        opsSec: avgPasetoLocRoundtripOps,
+        avgLatencyUs: Number(((roundsHistory.reduce((acc, r) => acc + r.pasetoLoc.avgLatencyUs, 0)) / rounds).toFixed(1))
       }
     }
   };
 
-  // --------------------------------------------------------------------------
-  // TAHAP 4: Pengujian PASETO v4.public (Asymmetric Ed25519 Sign & Verify)
-  // --------------------------------------------------------------------------
-  // A. Pengukuran Waktu Signing Asimetris Ed25519
-  const pasetoPubSignLatencies = [];
-  let samplePasetoPub = '';
-  const startPasetoPubSign = process.hrtime.bigint();
-  for (let i = 0; i < iterations; i++) {
-    const t0 = process.hrtime.bigint();
-    samplePasetoPub = await V4.sign(payload, ASYMMETRIC_ED_KEYPAIR.privateKey);
-    const t1 = process.hrtime.bigint();
-    pasetoPubSignLatencies.push(Number(t1 - t0) / 1000);
-  }
-  const endPasetoPubSign = process.hrtime.bigint();
-  const totalPasetoPubSignMs = Number(endPasetoPubSign - startPasetoPubSign) / 1e6;
-
-  // B. Pengukuran Waktu Verifikasi Asimetris Ed25519
-  const pasetoPubVerifyLatencies = [];
-  const startPasetoPubVerify = process.hrtime.bigint();
-  for (let i = 0; i < iterations; i++) {
-    const t0 = process.hrtime.bigint();
-    await V4.verify(samplePasetoPub, ASYMMETRIC_ED_KEYPAIR.publicKey);
-    const t1 = process.hrtime.bigint();
-    pasetoPubVerifyLatencies.push(Number(t1 - t0) / 1000);
-  }
-  const endPasetoPubVerify = process.hrtime.bigint();
-  const totalPasetoPubVerifyMs = Number(endPasetoPubVerify - startPasetoPubVerify) / 1e6;
-
-  // C. Kalkulasi Throughput, Ukuran & Struktur Byte PASETO v4.public
+  // Metrik PASETO v4.public
   const pasetoPubStats = {
     name: 'PASETO (v4.public)',
     type: 'Asymmetric (Ed25519 / EdDSA)',
@@ -599,25 +619,22 @@ async function runBenchmarkEngine(options = {}) {
     overheadBytes: Buffer.byteLength(samplePasetoPub) - rawPayloadBytes,
     overheadPercentage: Number((((Buffer.byteLength(samplePasetoPub) - rawPayloadBytes) / rawPayloadBytes) * 100).toFixed(1)),
     structureBreakdown: {
-      headerBytes: 10, // Konstanta string 'v4.public.'
-      payloadBytes: Buffer.byteLength(samplePasetoPub) - 10 - 86, // Base64url Plaintext Claims
-      signatureBytes: 86 // Base64url dari 64-byte Ed25519 signature
+      headerBytes: 10,
+      payloadBytes: Buffer.byteLength(samplePasetoPub) - 10 - 86,
+      signatureBytes: 86
     },
     performance: {
       sign: {
-        opsSec: Math.round((iterations / totalPasetoPubSignMs) * 1000),
-        totalTimeMs: Number(totalPasetoPubSignMs.toFixed(2)),
-        stats: calculateStats(pasetoPubSignLatencies)
+        opsSec: avgPasetoPubSignOps,
+        stats: calculateStats(allPasetoPubSignLatencies)
       },
       verify: {
-        opsSec: Math.round((iterations / totalPasetoPubVerifyMs) * 1000),
-        totalTimeMs: Number(totalPasetoPubVerifyMs.toFixed(2)),
-        stats: calculateStats(pasetoPubVerifyLatencies)
+        opsSec: avgPasetoPubVerifyOps,
+        stats: calculateStats(allPasetoPubVerifyLatencies)
       },
       roundtrip: {
-        opsSec: Math.round((iterations / (totalPasetoPubSignMs + totalPasetoPubVerifyMs)) * 1000),
-        totalTimeMs: Number((totalPasetoPubSignMs + totalPasetoPubVerifyMs).toFixed(2)),
-        avgLatencyUs: Number(((totalPasetoPubSignMs + totalPasetoPubVerifyMs) * 1000 / iterations).toFixed(2))
+        opsSec: avgPasetoPubRoundtripOps,
+        avgLatencyUs: Number(((roundsHistory.reduce((acc, r) => acc + r.pasetoPub.avgLatencyUs, 0)) / rounds).toFixed(1))
       }
     }
   };
@@ -625,7 +642,10 @@ async function runBenchmarkEngine(options = {}) {
   return {
     ok: true,
     benchmarkMeta: {
-      iterations,
+      rounds,
+      iterationsPerRound: opsPerRound,
+      totalIterations: totalOps,
+      iterations: Number(options.iterations || totalOps),
       preset: presetKey,
       rawPayloadBytes,
       timestamp: new Date().toISOString(),
@@ -637,6 +657,7 @@ async function runBenchmarkEngine(options = {}) {
         cpuModel: os.cpus()[0]?.model || 'Unknown'
       }
     },
+    roundsHistory,
     payloadSample: payload,
     results: {
       jwtHs: jwtHsStats,
@@ -685,7 +706,7 @@ async function handleApi(req, res) {
       sendJson(res, 400, { ok: false, error: 'Nama wajib diisi' });
       return;
     }
-    const pasetoFormat = body.pasetoFormat || 'v4.public';
+    const pasetoFormat = body.pasetoFormat || 'v4.local';
     const token = mode === 'jwt' ? makeJwt(name) : await makeSecureToken(name, pasetoFormat);
     sendJson(res, 200, {
       ok: true,
@@ -774,8 +795,9 @@ async function handleApi(req, res) {
     if (req.method === 'GET') {
       const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
       const iterations = Number(parsedUrl.searchParams.get('iterations') || 1000);
+      const rounds = Number(parsedUrl.searchParams.get('rounds') || 10);
       const preset = parsedUrl.searchParams.get('preset') || 'standard';
-      const data = await runBenchmarkEngine({ iterations, preset });
+      const data = await runBenchmarkEngine({ iterations, rounds, preset });
       sendJson(res, 200, data);
       return;
     }

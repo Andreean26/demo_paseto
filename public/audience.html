@@ -30,31 +30,22 @@
           <div id="pasetoFormatContainer" class="paseto-format-container" hidden>
             <label class="paseto-format-title">Format / Versi PASETO</label>
             <div class="format-picker" role="radiogroup" aria-label="Format PASETO">
-              <label class="format-card active" data-format="v4.public">
-                <input type="radio" name="pasetoFormat" value="v4.public" checked>
+              <label class="format-card active" data-format="v4.local">
+                <input type="radio" name="pasetoFormat" value="v4.local" checked>
+                <div class="format-card-header">
+                  <span class="format-badge local">LOCAL</span>
+                  <strong>v4.local</strong>
+                </div>
+                <p class="format-desc">Simetris AEAD (XChaCha20-Poly1305) &bull; Payload terenkripsi penuh (Zero Data Leakage)</p>
+              </label>
+
+              <label class="format-card" data-format="v4.public">
+                <input type="radio" name="pasetoFormat" value="v4.public">
                 <div class="format-card-header">
                   <span class="format-badge public">PUBLIC</span>
                   <strong>v4.public</strong>
                 </div>
                 <p class="format-desc">Asimetris (Ed25519) &bull; Payload terbaca &bull; Digital Signature</p>
-              </label>
-
-              <label class="format-card" data-format="v4.local">
-                <input type="radio" name="pasetoFormat" value="v4.local">
-                <div class="format-card-header">
-                  <span class="format-badge local">LOCAL</span>
-                  <strong>v4.local</strong>
-                </div>
-                <p class="format-desc">Simetris AEAD (XChaCha20-Poly1305) &bull; Payload terenkripsi penuh (Opaque)</p>
-              </label>
-
-              <label class="format-card" data-format="v3.public">
-                <input type="radio" name="pasetoFormat" value="v3.public">
-                <div class="format-card-header">
-                  <span class="format-badge public">PUBLIC</span>
-                  <strong>v3.public</strong>
-                </div>
-                <p class="format-desc">Asimetris (ECDSA P-384) &bull; Standar NIST &bull; Payload terbaca</p>
               </label>
             </div>
           </div>
@@ -85,7 +76,7 @@
             <button class="primary-button" id="accessButton" type="button">Akses brankas rahasia</button>
             <button class="quiet-button" id="copyButton" type="button">Salin token</button>
             <button class="quiet-button" id="tamperButton" type="button" hidden>Rusak 1 karakter</button>
-            <button class="danger-button" id="forgeButton" type="button">Forge JWT ADMIN</button>
+            <button class="danger-button" id="forgeButton" type="button">Forge alg:none (ADMIN)</button>
           </div>
         </div>
 
